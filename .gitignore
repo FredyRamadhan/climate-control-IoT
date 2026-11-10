@@ -8,3 +8,9 @@ consumer/.env
 broker/data/
 broker/log/
 broker/passwd
+build/
+*.bin
+*.elf
+*.map
+.vscode/
+venv/

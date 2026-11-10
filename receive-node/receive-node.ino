@@ -14,19 +14,50 @@
 #define PIN_RELAY     12  // D6 (GPIO12) - 250 VAC opto-isolated relay IN
 #define PIN_LED       13  // D7 (GPIO13) - Status LED (mirrors relay state)
 
-// Standard opto-isolated relays trigger on active-LOW
-#define RELAY_ACTIVE_LOW  true
+// Most opto-isolated relay boards are active-LOW. Set false for active-HIGH.
+#define RELAY_ACTIVE_LOW true
 
 // ==========================================
 // Constants & Configuration
 // ==========================================
-#define MQTT_TOPIC_SUB    "transmit/data"
-#define MQTT_TOPIC_ACK    "receive/ack"
-#define AC_REMOTE_HEADER  0xA1
+#define MQTT_TOPIC_STATE     "receive/state"
+#define MQTT_TOPIC_STATUS    "receive/status"
 
-// Legacy static NEC codes (for backwards compatibility)
-const uint32_t NEC_CODE_PWR_ON  = 0xFFA25D;
-const uint32_t NEC_CODE_PWR_OFF = 0xFF629D;
+#define WIFI_RETRY_MS        10000UL
+#define MQTT_RETRY_MS        10000UL
+#define STATE_MIN_PUBLISH_MS 1000UL   // De-duplicate repeated identical frames
+
+// ==========================================
+// IR Protocol (must match transmit-node)
+// ==========================================
+//   byte 3 : 0xA1 (protocol header)
+//   byte 2 : relay bit (bit 7), 5-bit checksum (bits 6..2), fan (bits 1..0)
+//   byte 1 : target temperature in °C (16..30)
+//   byte 0 : ~byte 1 (NEC command integrity byte)
+#define AC_IR_HEADER          0xA1
+#define AC_IR_RELAY_BIT       0x80
+#define AC_IR_FAN_MASK        0x03
+#define AC_IR_CRC_SHIFT       2
+#define AC_IR_CRC_MASK        0x1F
+#define AC_IR_MIN_TEMP        16
+#define AC_IR_MAX_TEMP        30
+
+enum FanSpeed : uint8_t {
+  FAN_OFF = 0,
+  FAN_LOW = 1,
+  FAN_MEDIUM = 2,
+  FAN_HIGH = 3
+};
+
+const char* fanSpeedToString(FanSpeed speed) {
+  switch (speed) {
+    case FAN_LOW:    return "low";
+    case FAN_MEDIUM: return "medium";
+    case FAN_HIGH:   return "high";
+    case FAN_OFF:
+    default:         return "off";
+  }
+}
 
 // ==========================================
 // Global Instances & State
@@ -36,176 +67,214 @@ PubSubClient mqttClient(espClient);
 IRrecv irReceiver(PIN_IR_RECV);
 decode_results results;
 
-bool relayState = false;
-uint8_t currentTargetTemp = 24; // Default starting target temperature in °C
+bool acPowerState = false;
+uint8_t targetTempC = 24;
+FanSpeed fanSpeed = FAN_OFF;
+bool stateValid = false;
 
-// NTP configuration
+bool relayState = false;
+unsigned long lastStatePublishMs = 0;
+unsigned long lastWifiAttemptMs = 0;
+unsigned long lastMqttAttemptMs = 0;
+
+// NTP configuration for Unix epoch timestamps
 const char* ntpServer = "pool.ntp.org";
 const long  gmtOffset_sec = 0;
 const int   daylightOffset_sec = 0;
 
-long getTimestamp() {
-  time_t now;
-  time(&now);
-  if (now > 100000) {
-    return (long)now;
-  }
-  return (long)(millis() / 1000);
+// ==========================================
+// Helpers
+// ==========================================
+uint32_t getTimestamp() {
+  time_t now = time(nullptr);
+  // 2023-11-14; anything earlier means NTP has not synchronised yet.
+  return (now > 1700000000) ? (uint32_t)now : 0;
 }
 
 void setRelay(bool state) {
+  bool changed = (state != relayState);
+
   relayState = state;
   if (RELAY_ACTIVE_LOW) {
     digitalWrite(PIN_RELAY, state ? LOW : HIGH);
   } else {
     digitalWrite(PIN_RELAY, state ? HIGH : LOW);
   }
-  // Status LED mirrors relay state
   digitalWrite(PIN_LED, state ? HIGH : LOW);
-  Serial.print("[Relay Actuator] State changed to: ");
-  Serial.println(state ? "ON" : "OFF");
-}
 
-void publishAck(const char* irCodeStr, bool state, uint8_t targetTemp) {
-  // Schema: {"ir_code": "0x<hex>", "relay": bool, "target_temp": int, "ts": int}
-  JsonDocument doc;
-  doc["ir_code"] = irCodeStr;
-  doc["relay"] = state;
-  doc["target_temp"] = targetTemp;
-  doc["ts"] = getTimestamp();
-
-  char jsonBuffer[256];
-  serializeJson(doc, jsonBuffer);
-
-  Serial.print("[Publish ACK] Topic: ");
-  Serial.print(MQTT_TOPIC_ACK);
-  Serial.print(" | Payload: ");
-  Serial.println(jsonBuffer);
-
-  bool pubSuccess = mqttClient.publish(MQTT_TOPIC_ACK, jsonBuffer, false);
-  if (!pubSuccess) {
-    Serial.println("[MQTT] Warning: ACK publish failed.");
+  if (changed) {
+    Serial.print("[Relay] ");
+    Serial.println(state ? "ON" : "OFF");
   }
 }
 
-/**
- * Attempts to decode custom 32-bit AC Remote frame:
- * [0xA1][Power: 0x01/0x00][TargetTemp: 16-32][~TargetTemp]
- */
-bool decodeAcRemoteFrame(uint32_t rawValue, bool &outPowerOn, uint8_t &outTargetTemp) {
+bool decodeAcFrame(uint32_t rawValue, bool &outPowerOn, uint8_t &outTargetTemp,
+                   FanSpeed &outFanSpeed) {
   uint8_t header = (rawValue >> 24) & 0xFF;
-  if (header != AC_REMOTE_HEADER) {
-    return false;
-  }
-
-  uint8_t pwrByte = (rawValue >> 16) & 0xFF;
+  uint8_t flags = (rawValue >> 16) & 0xFF;
   uint8_t tempByte = (rawValue >> 8) & 0xFF;
-  uint8_t checkByte = rawValue & 0xFF;
+  uint8_t invertedTemp = rawValue & 0xFF;
 
-  // Validate integrity checksum
-  if (checkByte != (uint8_t)(~tempByte)) {
-    Serial.println("[IR Decoder] Parity/checksum check failed on AC remote frame.");
+  if (header != AC_IR_HEADER) {
     return false;
   }
 
-  outPowerOn = (pwrByte == 0x01);
+  // NEC command integrity byte.
+  if ((uint8_t)(~tempByte) != invertedTemp) {
+    Serial.println("[IR] Checksum failed (temperature byte).");
+    return false;
+  }
+
+  if (tempByte < AC_IR_MIN_TEMP || tempByte > AC_IR_MAX_TEMP) {
+    Serial.println("[IR] Temperature outside supported range.");
+    return false;
+  }
+
+  uint8_t fanCode = flags & AC_IR_FAN_MASK;
+  uint8_t flagsWithoutCrc = flags & (AC_IR_RELAY_BIT | AC_IR_FAN_MASK);
+  uint8_t receivedCrc = (flags >> AC_IR_CRC_SHIFT) & AC_IR_CRC_MASK;
+  uint8_t expectedCrc = (AC_IR_HEADER ^ flagsWithoutCrc ^ tempByte) & AC_IR_CRC_MASK;
+
+  if (receivedCrc != expectedCrc) {
+    Serial.println("[IR] Checksum failed (frame).");
+    return false;
+  }
+
+  outPowerOn = (flags & AC_IR_RELAY_BIT) != 0;
   outTargetTemp = tempByte;
+  outFanSpeed = (FanSpeed)fanCode;
   return true;
 }
 
-void mqttCallback(char* topic, byte* payload, unsigned int length) {
-  Serial.print("[MQTT Callback] Message arrived [");
-  Serial.print(topic);
-  Serial.print("]: ");
+void publishState(const char* source) {
+  if (!mqttClient.connected()) {
+    return;
+  }
 
-  if (strcmp(topic, MQTT_TOPIC_SUB) == 0) {
-    JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, payload, length);
-    if (!err) {
-      if (!doc["target_temp"].isNull()) {
-        currentTargetTemp = doc["target_temp"].as<uint8_t>();
-      }
+  JsonDocument doc;
+  doc["ac_power_state"] = acPowerState;
+  doc["temp"] = (float)targetTempC;
+  doc["fan_speed"] = fanSpeedToString(fanSpeed);
+  doc["timestamp"] = getTimestamp();
+  doc["state_valid"] = stateValid;
+  doc["source"] = source;
 
-      if (!doc["ir_cmd"].isNull()) {
-        const char* cmd = doc["ir_cmd"];
-        Serial.print("Fallback cmd received: ");
-        Serial.println(cmd);
+  char jsonBuffer[256];
+  size_t length = serializeJson(doc, jsonBuffer, sizeof(jsonBuffer));
+  if (length == 0) {
+    Serial.println("[MQTT] Failed to serialize state (buffer too small).");
+    return;
+  }
 
-        char synthCode[16];
-        if (strcmp(cmd, "PWR_ON") == 0) {
-          setRelay(true);
-          uint8_t check = (uint8_t)(~currentTargetTemp);
-          snprintf(synthCode, sizeof(synthCode), "0xA101%02X%02X", currentTargetTemp, check);
-          publishAck(synthCode, relayState, currentTargetTemp);
-        } else if (strcmp(cmd, "PWR_OFF") == 0) {
-          setRelay(false);
-          uint8_t check = (uint8_t)(~currentTargetTemp);
-          snprintf(synthCode, sizeof(synthCode), "0xA100%02X%02X", currentTargetTemp, check);
-          publishAck(synthCode, relayState, currentTargetTemp);
-        }
-      }
-    } else {
-      Serial.println("JSON parse error on fallback topic");
-    }
+  bool published = mqttClient.publish(MQTT_TOPIC_STATE, jsonBuffer, true);
+  lastStatePublishMs = millis();
+
+  Serial.print("[MQTT] ");
+  Serial.print(MQTT_TOPIC_STATE);
+  Serial.print(published ? " -> " : " FAILED -> ");
+  Serial.println(jsonBuffer);
+}
+
+void applyDecodedState(bool powerOn, uint8_t tempC, FanSpeed fan) {
+  bool changed = !stateValid ||
+                 (powerOn != acPowerState) ||
+                 (tempC != targetTempC) ||
+                 (fan != fanSpeed);
+
+  acPowerState = powerOn;
+  targetTempC = tempC;
+  fanSpeed = fan;
+  stateValid = true;
+
+  setRelay(acPowerState);
+
+  Serial.print("[AC] power=");
+  Serial.print(acPowerState ? "on" : "off");
+  Serial.print(" temp=");
+  Serial.print(targetTempC);
+  Serial.print("C fan=");
+  Serial.println(fanSpeedToString(fanSpeed));
+
+  unsigned long now = millis();
+  if (changed || (now - lastStatePublishMs >= STATE_MIN_PUBLISH_MS)) {
+    publishState(changed ? "ir-change" : "ir-heartbeat");
   }
 }
 
 void setupWifi() {
-  delay(10);
-  Serial.println();
+  WiFi.mode(WIFI_STA);
+  WiFi.persistent(false);
+  WiFi.setAutoReconnect(true);
+  WiFi.hostname("climate-receive");
+
   Serial.print("[WiFi] Connecting to: ");
   Serial.println(WIFI_SSID);
-
-  WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
-  int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
-    delay(500);
-    Serial.print(".");
-    attempts++;
-  }
-
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println();
-    Serial.print("[WiFi] Connected! IP Address: ");
-    Serial.println(WiFi.localIP());
-  } else {
-    Serial.println("\n[WiFi] Connection failed. Will retry in loop.");
-  }
 }
 
-void reconnectMqtt() {
-  if (WiFi.status() != WL_CONNECTED) {
+void maintainWifi() {
+  if (WiFi.status() == WL_CONNECTED) {
     return;
   }
 
-  while (!mqttClient.connected()) {
-    Serial.print("[MQTT] Connecting to ");
-    Serial.print(MQTT_HOST);
-    Serial.print(":");
-    Serial.println(MQTT_PORT);
+  unsigned long now = millis();
+  if (now - lastWifiAttemptMs < WIFI_RETRY_MS) {
+    return;
+  }
+  lastWifiAttemptMs = now;
 
-    String clientId = "ESP8266-Receiver-" + String(ESP.getChipId(), HEX);
+  Serial.print("[WiFi] Reconnecting to: ");
+  Serial.println(WIFI_SSID);
+  WiFi.disconnect();
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+}
 
-    if (mqttClient.connect(clientId.c_str(), MQTT_USER, MQTT_PASS)) {
-      Serial.println("[MQTT] Connected successfully.");
-      mqttClient.subscribe(MQTT_TOPIC_SUB, 1);
-      Serial.print("[MQTT] Subscribed to: ");
-      Serial.println(MQTT_TOPIC_SUB);
-    } else {
-      Serial.print("[MQTT] Failed, rc=");
-      Serial.print(mqttClient.state());
-      Serial.println(" - retrying in 3 seconds...");
-      delay(3000);
-      break;
-    }
+void maintainMqtt() {
+  if (WiFi.status() != WL_CONNECTED || mqttClient.connected()) {
+    return;
+  }
+
+  unsigned long now = millis();
+  if (now - lastMqttAttemptMs < MQTT_RETRY_MS) {
+    return;
+  }
+  lastMqttAttemptMs = now;
+
+  String clientId = "climate-rx-" + String(ESP.getChipId(), HEX);
+
+  Serial.print("[MQTT] Connecting to ");
+  Serial.print(MQTT_HOST);
+  Serial.print(":");
+  Serial.print(MQTT_PORT);
+  Serial.print(" as ");
+  Serial.println(clientId);
+
+  bool connected = mqttClient.connect(
+      clientId.c_str(), MQTT_USER, MQTT_PASS,
+      MQTT_TOPIC_STATUS, 1, true, "{\"online\":false}");
+
+  if (connected) {
+    Serial.println("[MQTT] Connected.");
+    mqttClient.publish(MQTT_TOPIC_STATUS, "{\"online\":true}", true);
+    // Publish current (possibly default/not-yet-synced) state so dashboards
+    // receive something immediately after a broker/connection restart.
+    publishState("mqtt-connected");
+  } else {
+    Serial.print("[MQTT] Connection failed, rc=");
+    Serial.print(mqttClient.state());
+    Serial.println(". Will retry.");
   }
 }
 
+// ==========================================
+// Arduino lifecycle
+// ==========================================
 void setup() {
   Serial.begin(115200);
-  Serial.println("\n--- IoT Auto Climate Control: Receiver Node ---");
+  delay(100);
+
+  Serial.println();
+  Serial.println("--- IoT Climate Control: Receiver / AC Emulator ---");
 
   pinMode(PIN_RELAY, OUTPUT);
   pinMode(PIN_LED, OUTPUT);
@@ -214,54 +283,51 @@ void setup() {
   irReceiver.enableIRIn();
 
   setupWifi();
-  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer, "time.nist.gov");
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer, "time.google.com");
 
   mqttClient.setServer(MQTT_HOST, MQTT_PORT);
-  mqttClient.setCallback(mqttCallback);
   mqttClient.setBufferSize(512);
+  mqttClient.setKeepAlive(15);
+  mqttClient.setSocketTimeout(3);
+
+  lastWifiAttemptMs = millis();
+  lastMqttAttemptMs = millis() - MQTT_RETRY_MS;
 }
 
 void loop() {
-  if (WiFi.status() != WL_CONNECTED) {
-    setupWifi();
-  } else if (!mqttClient.connected()) {
-    reconnectMqtt();
+  // Decode IR first. The receiver is resumed before any MQTT publish, so a
+  // slow network operation cannot make us miss the next IR frame.
+  if (irReceiver.decode(&results)) {
+    // Copy what we need, then resume reception before any slow MQTT publish.
+    uint64_t rawValue = results.value;
+    uint16_t bitCount = results.bits;
+    bool isRepeat = results.repeat;
+    decode_type_t protocol = results.decode_type;
+    irReceiver.resume();
+
+    if (!isRepeat && bitCount == 32 &&
+        (protocol == decode_type_t::NEC || protocol == decode_type_t::NEC_LIKE)) {
+      uint32_t frame = (uint32_t)rawValue;
+      char hexBuffer[11];
+      snprintf(hexBuffer, sizeof(hexBuffer), "0x%08lX", (unsigned long)frame);
+      Serial.print("[IR] RX ");
+      Serial.println(hexBuffer);
+
+      bool powerOn = false;
+      uint8_t tempC = 24;
+      FanSpeed fan = FAN_OFF;
+
+      if (decodeAcFrame(frame, powerOn, tempC, fan)) {
+        applyDecodedState(powerOn, tempC, fan);
+      } else {
+        Serial.println("[IR] Ignoring frame that is not a valid AC command.");
+      }
+    }
+  }
+
+  maintainWifi();
+  if (WiFi.status() == WL_CONNECTED) {
+    maintainMqtt();
   }
   mqttClient.loop();
-
-  // Decode incoming Infrared commands
-  if (irReceiver.decode(&results)) {
-    char hexBuffer[16];
-    snprintf(hexBuffer, sizeof(hexBuffer), "0x%08X", (unsigned long)results.value);
-    Serial.print("[IR Demodulator] Received code: ");
-    Serial.println(hexBuffer);
-
-    bool powerOn = false;
-    uint8_t targetTemp = 24;
-
-    if (decodeAcRemoteFrame(results.value, powerOn, targetTemp)) {
-      Serial.print("[IR Decoder] Decoded AC Remote -> Power: ");
-      Serial.print(powerOn ? "ON" : "OFF");
-      Serial.print(", Target Temp: ");
-      Serial.print(targetTemp);
-      Serial.println("C");
-
-      currentTargetTemp = targetTemp;
-      setRelay(powerOn);
-      publishAck(hexBuffer, relayState, currentTargetTemp);
-    } else if (results.value == NEC_CODE_PWR_ON) {
-      // Legacy code compatibility
-      setRelay(true);
-      publishAck("0xFFA25D", relayState, currentTargetTemp);
-    } else if (results.value == NEC_CODE_PWR_OFF) {
-      // Legacy code compatibility
-      setRelay(false);
-      publishAck("0xFF629D", relayState, currentTargetTemp);
-    } else {
-      Serial.print("[IR Demodulator] Unhandled IR Code: ");
-      Serial.println(hexBuffer);
-    }
-
-    irReceiver.resume(); // Ready to receive next pulse train
-  }
 }
