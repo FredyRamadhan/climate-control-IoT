@@ -80,41 +80,53 @@ def test_e2e():
         client.connect(MQTT_HOST, MQTT_PORT, keepalive=60)
         client.loop_start()
 
-        # Telemetry sample 1: Motion detected (rising edge)
+        # Telemetry sample 1: Motion detected with high ambient temp (Rule 1: Target = 16°C, Power ON)
         ts1 = int(time.time())
         t_payload1 = {
             "motion": True,
-            "temp_c": 27.2,
-            "hum": 62.0,
+            "temp_c": 29.5,
+            "hum": 65.0,
+            "target_temp": 16,
             "ir_cmd": "PWR_ON",
             "ts": ts1,
         }
         client.publish("transmit/data", json.dumps(t_payload1), qos=1)
-        print(f"Published transmit/data (PWR_ON): {t_payload1}")
+        print(f"Published transmit/data (Rule 1 -> 16°C ON): {t_payload1}")
 
-        # Receiver ACK 1: Relay turned ON
-        r_payload1 = {"ir_code": "0xFFA25D", "relay": True, "ts": ts1 + 1}
+        # Receiver ACK 1: AC Remote code 0xA10110EF decoded -> Relay ON, target_temp = 16
+        r_payload1 = {
+            "ir_code": "0xA10110EF",
+            "relay": True,
+            "target_temp": 16,
+            "ts": ts1 + 1,
+        }
         client.publish("receive/ack", json.dumps(r_payload1), qos=1)
-        print(f"Published receive/ack (Relay ON): {r_payload1}")
+        print(f"Published receive/ack (Relay ON, Target 16°C): {r_payload1}")
 
         time.sleep(0.5)
 
-        # Telemetry sample 2: Motion cleared (falling edge)
+        # Telemetry sample 2: Inactivity shutoff (Rule 3: Target = 24°C, Power OFF)
         ts2 = int(time.time())
         t_payload2 = {
             "motion": False,
-            "temp_c": 25.8,
-            "hum": 58.5,
+            "temp_c": 23.5,
+            "hum": 55.0,
+            "target_temp": 24,
             "ir_cmd": "PWR_OFF",
             "ts": ts2,
         }
         client.publish("transmit/data", json.dumps(t_payload2), qos=1)
-        print(f"Published transmit/data (PWR_OFF): {t_payload2}")
+        print(f"Published transmit/data (Rule 3 -> 24°C OFF): {t_payload2}")
 
-        # Receiver ACK 2: Relay turned OFF
-        r_payload2 = {"ir_code": "0xFF629D", "relay": False, "ts": ts2 + 1}
+        # Receiver ACK 2: AC Remote code 0xA10018E7 decoded -> Relay OFF, target_temp = 24
+        r_payload2 = {
+            "ir_code": "0xA10018E7",
+            "relay": False,
+            "target_temp": 24,
+            "ts": ts2 + 1,
+        }
         client.publish("receive/ack", json.dumps(r_payload2), qos=1)
-        print(f"Published receive/ack (Relay OFF): {r_payload2}")
+        print(f"Published receive/ack (Relay OFF, Target 24°C): {r_payload2}")
 
         client.loop_stop()
         client.disconnect()
@@ -137,7 +149,8 @@ def test_e2e():
         print(f"GET /transmit/latest -> {t_data}")
         assert t_data["motion"] is False
         assert t_data["ir_cmd"] == "PWR_OFF"
-        assert t_data["temp_c"] == 25.8
+        assert t_data["temp_c"] == 23.5
+        assert t_data["target_temp"] == 24
 
         # /receive/latest
         r_res = requests.get(f"{BASE_URL}/receive/latest", timeout=2)
@@ -145,7 +158,8 @@ def test_e2e():
         r_data = r_res.json()
         print(f"GET /receive/latest -> {r_data}")
         assert r_data["relay"] is False
-        assert r_data["ir_code"] == "0xFF629D"
+        assert r_data["ir_code"] == "0xA10018E7"
+        assert r_data["target_temp"] == 24
 
         # /history/transmit
         hist_t_res = requests.get(f"{BASE_URL}/history/transmit", timeout=2)

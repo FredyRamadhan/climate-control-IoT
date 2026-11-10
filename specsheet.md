@@ -77,12 +77,17 @@ The scope covers four nodes (Transmitter, Receiver, Consumer, API-Producer) and 
 | Publish topic     | `transmit/data`                                                            |
 | Sample interval   | 5 s                                                                        |
 | Payload format    | JSON                                                                       |
-| Payload schema    | `{"motion": bool, "temp_c": float, "hum": float, "ir_cmd": "PWR_ON" \| "PWR_OFF" \| null, "ts": int}` |
+| Payload schema    | `{"motion": bool, "temp_c": float, "hum": float, "target_temp": int, "ir_cmd": "PWR_ON" \| "PWR_OFF" \| null, "ts": int}` |
 | QoS / Retained    | 1 / false                                                                  |
 | Power             | 5 V USB                                                                    |
 | GPIO mapping      | PIR → D5 (GPIO14), DHT11 → D4 (GPIO2), KY-005 → D2 (GPIO4), LED → D0 (GPIO16) |
 
-**Logic:** Motion rising edge triggers `PWR_ON` NEC command; falling edge triggers `PWR_OFF`.
+**Rule-Based Climate Control Logic:**
+- **Rule 1 (Hot Occupancy):** `motion == true` AND `temp_c > 28.0` → Set `target_temp = 16`, `PWR_ON` (Max cooling).
+- **Rule 2 (Vacant Moderation):** `motion == false` for $> 5\text{ min}$ (300 s) AND `temp_c < 24.0` → Set `target_temp = 24`, `PWR_ON` (Eco moderation).
+- **Rule 3 (Vacant Auto-Off):** `motion == false` for $> 10\text{ min}$ (600 s) AND `target_temp == 24` → Set `PWR_OFF` (Auto shut-off).
+- **Default Occupied:** `motion == true` AND `temp_c <= 28.0` → Set `target_temp = 24`, `PWR_ON` (Comfort baseline).
+- **IR Emulation:** Emits 32-bit structured NEC packets: `[0xA1][Power: 0x01/0x00][TargetTemp: 16-32][~TargetTemp]`.
 
 ---
 
@@ -98,7 +103,7 @@ The scope covers four nodes (Transmitter, Receiver, Consumer, API-Producer) and 
 | Subscribed topic  | `transmit/data`                                                            |
 | Publish topic     | `receive/ack`                                                              |
 | Payload format    | JSON                                                                       |
-| Payload schema    | `{"ir_code": "0x<hex>", "relay": bool, "ts": int}`                         |
+| Payload schema    | `{"ir_code": "0x<hex>", "relay": bool, "target_temp": int, "ts": int}`    |
 | QoS / Retained    | 1 / false                                                                  |
 | Power             | 5 V USB + external relay coil supply                                       |
 | GPIO mapping      | VS1838B OUT → D5 (GPIO14), Relay IN → D6 (GPIO12), Status LED → D7 (GPIO13) |
@@ -150,8 +155,8 @@ The scope covers four nodes (Transmitter, Receiver, Consumer, API-Producer) and 
 
 | Topic            | Publisher     | Subscribers                   | QoS | Retained | Payload schema                                        |
 |------------------|---------------|-------------------------------|-----|----------|-------------------------------------------------------|
-| `transmit/data`  | Transmitter   | Receiver, Consumer            | 1   | false    | `{"motion": bool, "temp_c": float, "hum": float, "ir_cmd": str, "ts": int}` |
-| `receive/ack`    | Receiver      | Consumer                      | 1   | false    | `{"ir_code": str, "relay": bool, "ts": int}`          |
+| `transmit/data`  | Transmitter   | Receiver, Consumer            | 1   | false    | `{"motion": bool, "temp_c": float, "hum": float, "target_temp": int, "ir_cmd": str, "ts": int}` |
+| `receive/ack`    | Receiver      | Consumer                      | 1   | false    | `{"ir_code": str, "relay": bool, "target_temp": int, "ts": int}` |
 | `api/weather`    | API-Producer  | Consumer                      | 1   | true     | `{"city": str, "temp_c": float, "hum": int, "desc": str, "ts": int}` |
 
 ---

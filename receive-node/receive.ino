@@ -18,13 +18,15 @@
 #define RELAY_ACTIVE_LOW  true
 
 // ==========================================
-// Constants & NEC IR Codes
+// Constants & Configuration
 // ==========================================
 #define MQTT_TOPIC_SUB    "transmit/data"
 #define MQTT_TOPIC_ACK    "receive/ack"
+#define AC_REMOTE_HEADER  0xA1
 
-const uint32_t NEC_CODE_PWR_ON  = 0xFFA25D; // Power ON code matching transmitter
-const uint32_t NEC_CODE_PWR_OFF = 0xFF629D; // Power OFF code matching transmitter
+// Legacy static NEC codes (for backwards compatibility)
+const uint32_t NEC_CODE_PWR_ON  = 0xFFA25D;
+const uint32_t NEC_CODE_PWR_OFF = 0xFF629D;
 
 // ==========================================
 // Global Instances & State
@@ -35,6 +37,7 @@ IRrecv irReceiver(PIN_IR_RECV);
 decode_results results;
 
 bool relayState = false;
+uint8_t currentTargetTemp = 24; // Default starting target temperature in °C
 
 // NTP configuration
 const char* ntpServer = "pool.ntp.org";
@@ -59,15 +62,16 @@ void setRelay(bool state) {
   }
   // Status LED mirrors relay state
   digitalWrite(PIN_LED, state ? HIGH : LOW);
-  Serial.print("[Relay] State changed to: ");
+  Serial.print("[Relay Actuator] State changed to: ");
   Serial.println(state ? "ON" : "OFF");
 }
 
-void publishAck(const char* irCodeStr, bool state) {
-  // Schema: {"ir_code": "0x<hex>", "relay": bool, "ts": int}
+void publishAck(const char* irCodeStr, bool state, uint8_t targetTemp) {
+  // Schema: {"ir_code": "0x<hex>", "relay": bool, "target_temp": int, "ts": int}
   JsonDocument doc;
   doc["ir_code"] = irCodeStr;
   doc["relay"] = state;
+  doc["target_temp"] = targetTemp;
   doc["ts"] = getTimestamp();
 
   char jsonBuffer[256];
@@ -84,6 +88,31 @@ void publishAck(const char* irCodeStr, bool state) {
   }
 }
 
+/**
+ * Attempts to decode custom 32-bit AC Remote frame:
+ * [0xA1][Power: 0x01/0x00][TargetTemp: 16-32][~TargetTemp]
+ */
+bool decodeAcRemoteFrame(uint32_t rawValue, bool &outPowerOn, uint8_t &outTargetTemp) {
+  uint8_t header = (rawValue >> 24) & 0xFF;
+  if (header != AC_REMOTE_HEADER) {
+    return false;
+  }
+
+  uint8_t pwrByte = (rawValue >> 16) & 0xFF;
+  uint8_t tempByte = (rawValue >> 8) & 0xFF;
+  uint8_t checkByte = rawValue & 0xFF;
+
+  // Validate integrity checksum
+  if (checkByte != (uint8_t)(~tempByte)) {
+    Serial.println("[IR Decoder] Parity/checksum check failed on AC remote frame.");
+    return false;
+  }
+
+  outPowerOn = (pwrByte == 0x01);
+  outTargetTemp = tempByte;
+  return true;
+}
+
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   Serial.print("[MQTT Callback] Message arrived [");
   Serial.print(topic);
@@ -93,17 +122,26 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, payload, length);
     if (!err) {
+      if (!doc["target_temp"].isNull()) {
+        currentTargetTemp = doc["target_temp"].as<uint8_t>();
+      }
+
       if (!doc["ir_cmd"].isNull()) {
         const char* cmd = doc["ir_cmd"];
         Serial.print("Fallback cmd received: ");
         Serial.println(cmd);
 
+        char synthCode[16];
         if (strcmp(cmd, "PWR_ON") == 0) {
           setRelay(true);
-          publishAck("0xFFA25D", relayState);
+          uint8_t check = (uint8_t)(~currentTargetTemp);
+          snprintf(synthCode, sizeof(synthCode), "0xA101%02X%02X", currentTargetTemp, check);
+          publishAck(synthCode, relayState, currentTargetTemp);
         } else if (strcmp(cmd, "PWR_OFF") == 0) {
           setRelay(false);
-          publishAck("0xFF629D", relayState);
+          uint8_t check = (uint8_t)(~currentTargetTemp);
+          snprintf(synthCode, sizeof(synthCode), "0xA100%02X%02X", currentTargetTemp, check);
+          publishAck(synthCode, relayState, currentTargetTemp);
         }
       }
     } else {
@@ -152,7 +190,6 @@ void reconnectMqtt() {
 
     if (mqttClient.connect(clientId.c_str(), MQTT_USER, MQTT_PASS)) {
       Serial.println("[MQTT] Connected successfully.");
-      // Subscribe to transmit/data per spec
       mqttClient.subscribe(MQTT_TOPIC_SUB, 1);
       Serial.print("[MQTT] Subscribed to: ");
       Serial.println(MQTT_TOPIC_SUB);
@@ -170,15 +207,12 @@ void setup() {
   Serial.begin(115200);
   Serial.println("\n--- IoT Auto Climate Control: Receiver Node ---");
 
-  // GPIO configuration
   pinMode(PIN_RELAY, OUTPUT);
   pinMode(PIN_LED, OUTPUT);
-  setRelay(false); // Default to off state safely
+  setRelay(false);
 
-  // IR Demodulator setup
   irReceiver.enableIRIn();
 
-  // Network and MQTT setup
   setupWifi();
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer, "time.nist.gov");
 
@@ -195,23 +229,39 @@ void loop() {
   }
   mqttClient.loop();
 
-  // Handle incoming IR commands
+  // Decode incoming Infrared commands
   if (irReceiver.decode(&results)) {
     char hexBuffer[16];
-    snprintf(hexBuffer, sizeof(hexBuffer), "0x%06lX", (unsigned long)results.value);
+    snprintf(hexBuffer, sizeof(hexBuffer), "0x%08X", (unsigned long)results.value);
     Serial.print("[IR Demodulator] Received code: ");
     Serial.println(hexBuffer);
 
-    if (results.value == NEC_CODE_PWR_ON) {
+    bool powerOn = false;
+    uint8_t targetTemp = 24;
+
+    if (decodeAcRemoteFrame(results.value, powerOn, targetTemp)) {
+      Serial.print("[IR Decoder] Decoded AC Remote -> Power: ");
+      Serial.print(powerOn ? "ON" : "OFF");
+      Serial.print(", Target Temp: ");
+      Serial.print(targetTemp);
+      Serial.println("C");
+
+      currentTargetTemp = targetTemp;
+      setRelay(powerOn);
+      publishAck(hexBuffer, relayState, currentTargetTemp);
+    } else if (results.value == NEC_CODE_PWR_ON) {
+      // Legacy code compatibility
       setRelay(true);
-      publishAck(hexBuffer, relayState);
+      publishAck("0xFFA25D", relayState, currentTargetTemp);
     } else if (results.value == NEC_CODE_PWR_OFF) {
+      // Legacy code compatibility
       setRelay(false);
-      publishAck(hexBuffer, relayState);
+      publishAck("0xFF629D", relayState, currentTargetTemp);
     } else {
       Serial.print("[IR Demodulator] Unhandled IR Code: ");
       Serial.println(hexBuffer);
     }
-    irReceiver.resume(); // Receive the next value
+
+    irReceiver.resume(); // Ready to receive next pulse train
   }
 }
