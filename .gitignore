@@ -1,1 +1,10 @@
 */**/secrets.h
+.venv/
+__pycache__/
+*.pyc
+.env
+api-producer/.env
+consumer/.env
+broker/data/
+broker/log/
+broker/passwd
