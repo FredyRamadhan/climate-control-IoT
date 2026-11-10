@@ -51,6 +51,12 @@ Detailed specifications and implementation audit documents:
 │   └── .env.example            # Environment configuration template
 ├── scripts/
 │   └── e2e_integration_test.py # End-to-end integration and latency benchmark
+├── analytics/                  # Telemetry analytics, ML regression & Streamlit app
+│   ├── generate_mock_data.py   # 100,000-row telemetry dataset generator
+│   ├── train_regression_model.py # Multi-model regression training & evaluation
+│   ├── app.py                  # Comprehensive Streamlit analytics dashboard
+│   ├── requirements.txt        # Analytics and ML dependencies
+│   └── README.md               # Analytics documentation & user guide
 ├── specsheet.md                # System specification reference
 └── handover.md                 # Production handover document
 ```
@@ -84,3 +90,21 @@ python main.py
 ```bash
 .venv/bin/python scripts/e2e_integration_test.py
 ```
+
+---
+
+### 5. Run Analytics, ML Training & Streamlit Dashboard
+
+```bash
+cd analytics
+
+# 1. Generate 100,000 rows of mock telemetry data
+python generate_mock_data.py --rows 100000
+
+# 2. Train regression models and benchmark performance
+python train_regression_model.py --compare-all
+
+# 3. Launch Streamlit interactive dashboard
+streamlit run app.py
+```
+*Streamlit dashboard will be accessible at `http://localhost:8501`.*
