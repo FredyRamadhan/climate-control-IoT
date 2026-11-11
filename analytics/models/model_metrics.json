@@ -1,0 +1,100 @@
+{
+  "timestamp": "2026-11-11 08:24:38",
+  "champion_model": "hist_gradient_boosting",
+  "champion_metrics": {
+    "r2_score": 0.999,
+    "rmse": 14.98,
+    "mae": 9.63,
+    "mape_percent": 5.67,
+    "explained_variance": 0.999,
+    "max_error": 70.04,
+    "std_residual": 14.97,
+    "fit_duration_seconds": 0.627,
+    "model_name": "hist_gradient_boosting"
+  },
+  "all_model_benchmarks": {
+    "linear": {
+      "r2_score": 0.939,
+      "rmse": 118.59,
+      "mae": 95.17,
+      "mape_percent": 927.19,
+      "explained_variance": 0.939,
+      "max_error": 396.72,
+      "std_residual": 118.56,
+      "fit_duration_seconds": 0.05,
+      "model_name": "linear"
+    },
+    "ridge": {
+      "r2_score": 0.939,
+      "rmse": 118.58,
+      "mae": 95.16,
+      "mape_percent": 927.18,
+      "explained_variance": 0.939,
+      "max_error": 396.65,
+      "std_residual": 118.56,
+      "fit_duration_seconds": 0.026,
+      "model_name": "ridge"
+    },
+    "random_forest": {
+      "r2_score": 0.9985,
+      "rmse": 18.47,
+      "mae": 11.37,
+      "mape_percent": 4.12,
+      "explained_variance": 0.9985,
+      "max_error": 108.0,
+      "std_residual": 18.47,
+      "fit_duration_seconds": 1.076,
+      "model_name": "random_forest"
+    },
+    "hist_gradient_boosting": {
+      "r2_score": 0.999,
+      "rmse": 14.98,
+      "mae": 9.63,
+      "mape_percent": 5.67,
+      "explained_variance": 0.999,
+      "max_error": 70.04,
+      "std_residual": 14.97,
+      "fit_duration_seconds": 0.627,
+      "model_name": "hist_gradient_boosting"
+    }
+  },
+  "feature_importances": {
+    "indoor_temp_c": 0.05555555555555555,
+    "indoor_humidity": 0.05555555555555555,
+    "outdoor_temp_c": 0.05555555555555555,
+    "outdoor_humidity": 0.05555555555555555,
+    "occupancy_count": 0.05555555555555555,
+    "target_temp_c": 0.05555555555555555,
+    "temp_delta": 0.05555555555555555,
+    "hour_of_day": 0.05555555555555555,
+    "motion_detected": 0.05555555555555555,
+    "ac_power_state": 0.05555555555555555,
+    "weather_condition_Clear": 0.05555555555555555,
+    "weather_condition_Clouds": 0.05555555555555555,
+    "weather_condition_Rain": 0.05555555555555555,
+    "weather_condition_Thunderstorm": 0.05555555555555555,
+    "fan_speed_Auto": 0.05555555555555555,
+    "fan_speed_Low": 0.05555555555555555,
+    "fan_speed_Medium": 0.05555555555555555,
+    "fan_speed_Off": 0.05555555555555555
+  },
+  "numeric_features": [
+    "indoor_temp_c",
+    "indoor_humidity",
+    "outdoor_temp_c",
+    "outdoor_humidity",
+    "occupancy_count",
+    "target_temp_c",
+    "temp_delta",
+    "hour_of_day",
+    "motion_detected",
+    "ac_power_state"
+  ],
+  "categorical_features": [
+    "weather_condition",
+    "fan_speed"
+  ],
+  "target_column": "ac_power_consumption_w",
+  "training_samples": 8000,
+  "test_samples": 2000
+}

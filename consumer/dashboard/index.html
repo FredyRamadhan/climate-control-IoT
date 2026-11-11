@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Climate Control Dashboard</title>
+<script src="/static/vendor/chart.umd.min.js"></script>
+<script>
+  /* Fallback to the CDN when the vendored copy is unavailable (file:// use). */
+  if (typeof Chart === "undefined") {
+    document.write('<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"><\/script>');
+  }
+</script>
+<style>
+  :root {
+    --bg: #0b1220;
+    --panel: #121b2e;
+    --panel-2: #0e1728;
+    --border: #1f2b45;
+    --text: #e2e8f0;
+    --muted: #8ea0bd;
+    --faint: #5c6f8f;
+    --accent: #22d3ee;
+    --green: #34d399;
+    --red: #f87171;
+    --amber: #fbbf24;
+    --violet: #a78bfa;
+    --blue: #60a5fa;
+    --pink: #f472b6;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background:
+      radial-gradient(1200px 500px at 80% -10%, rgba(34, 211, 238, .06), transparent 60%),
+      var(--bg);
+    color: var(--text);
+    font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+    font-size: 14px;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 18px 20px 40px; }
+
+  /* ---------- header ---------- */
+  header {
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+    justify-content: space-between; margin-bottom: 14px;
+  }
+  .brand h1 { font-size: 20px; margin: 0; letter-spacing: .3px; }
+  .brand .subtitle { color: var(--muted); font-size: 12px; }
+  .pills { display: flex; flex-wrap: wrap; gap: 8px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: var(--panel); border: 1px solid var(--border);
+    padding: 5px 11px; border-radius: 999px; font-size: 12px; color: var(--muted);
+    white-space: nowrap;
+  }
+  .pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+  .pill.on  { color: var(--text); }
+  .pill.on  .dot { background: var(--green); box-shadow: 0 0 8px rgba(52, 211, 153, .8); }
+  .pill.off .dot { background: var(--red);   box-shadow: 0 0 8px rgba(248, 113, 113, .8); }
+  .pill.time { color: var(--faint); }
+
+  .apibar {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 16px;
+    color: var(--faint); font-size: 12px;
+  }
+  .apibar input {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 4px 8px; font-size: 12px; width: 260px;
+    font-family: ui-monospace, "JetBrains Mono", Consolas, monospace;
+  }
+  .apibar button {
+    background: var(--panel-2); color: var(--muted); border: 1px solid var(--border);
+    border-radius: 8px; padding: 4px 10px; cursor: pointer; font-size: 12px;
+  }
+  .apibar button:hover { color: var(--text); border-color: #2c3d63; }
+
+  /* ---------- cards ---------- */
+  .cards {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+    gap: 10px; margin-bottom: 14px;
+  }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 12px 14px; min-height: 86px;
+  }
+  .cl { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .8px; }
+  .cv { font-size: 22px; font-weight: 600; margin-top: 6px; }
+  .cv .cu { font-size: 12px; color: var(--muted); font-weight: 400; margin-left: 3px; }
+  .cs { color: var(--faint); font-size: 11.5px; margin-top: 4px; min-height: 14px; }
+  .good { color: var(--green); }
+  .bad  { color: var(--red); }
+  .warn { color: var(--amber); }
+  .cy   { color: var(--accent); }
+
+  /* ---------- charts ---------- */
+  .charts {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 10px; margin-bottom: 14px;
+  }
+  .chart-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+  .chart-card.wide { grid-column: 1 / -1; }
+  .chart-card h2, .panel h2 {
+    font-size: 13px; margin: 0 0 10px; color: var(--muted); font-weight: 600;
+    text-transform: uppercase; letter-spacing: .8px;
+  }
+  .chart-wrap { position: relative; height: 250px; }
+  .chart-card.wide .chart-wrap { height: 270px; }
+  .chart-note { color: var(--faint); font-size: 11px; margin-top: 8px; }
+
+  /* ---------- lower panels ---------- */
+  .lower { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 10px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+
+  /* control form */
+  .seg { display: flex; gap: 6px; margin-bottom: 14px; }
+  .seg input { position: absolute; opacity: 0; pointer-events: none; }
+  .seg label {
+    flex: 1; text-align: center; padding: 8px 4px; border-radius: 9px;
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+    cursor: pointer; font-weight: 600; font-size: 13px; user-select: none;
+  }
+  .seg input:checked + label {
+    background: rgba(34, 211, 238, .12); border-color: var(--accent); color: var(--accent);
+  }
+  .grp { margin-bottom: 14px; }
+  .grp.hidden { display: none; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  .row label { color: var(--muted); font-size: 12.5px; }
+  select, input[type="text"], input[type="number"] {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 9px; font-size: 13px; font-family: inherit;
+  }
+  select:focus, input:focus { outline: none; border-color: #2c3d63; }
+  input[type="range"] { width: 100%; accent-color: var(--accent); }
+  .temp-row { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; margin-bottom: 10px; }
+  .temp-val { font-size: 20px; font-weight: 600; color: var(--amber); width: 64px; text-align: right; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+    border-radius: 999px; padding: 4px 11px; font-size: 12px; cursor: pointer; user-select: none;
+  }
+  .chip:hover { color: var(--text); }
+  .chip.sel { border-color: var(--accent); color: var(--accent); background: rgba(34, 211, 238, .1); }
+  .hint { color: var(--faint); font-size: 11.5px; margin-top: 6px; }
+
+  .preview {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 9px;
+    padding: 10px; margin-bottom: 12px;
+  }
+  .preview .ph { color: var(--faint); font-size: 10.5px; text-transform: uppercase; letter-spacing: .8px; margin-bottom: 6px; }
+  pre {
+    margin: 0; font-family: ui-monospace, "JetBrains Mono", Consolas, monospace;
+    font-size: 11.5px; color: #b7c5de; white-space: pre-wrap; word-break: break-word;
+  }
+  button.primary {
+    width: 100%; padding: 11px; border: none; border-radius: 9px; cursor: pointer;
+    background: linear-gradient(180deg, #26d6f2, #17b8d6); color: #06222b;
+    font-weight: 700; font-size: 14px; font-family: inherit;
+  }
+  button.primary:hover { filter: brightness(1.07); }
+  button.primary:disabled { opacity: .45; cursor: wait; }
+
+  .result { margin-top: 12px; border-radius: 9px; padding: 11px; font-size: 12.5px; display: none; }
+  .result.show { display: block; }
+  .result.ok   { background: rgba(52, 211, 153, .1);  border: 1px solid rgba(52, 211, 153, .4); }
+  .result.err  { background: rgba(248, 113, 113, .1); border: 1px solid rgba(248, 113, 113, .4); }
+  .result.warn { background: rgba(251, 191, 36, .1); border: 1px solid rgba(251, 191, 36, .4); }
+  .badge {
+    display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px;
+    font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+  }
+  .badge.ok  { background: rgba(52, 211, 153, .15); color: var(--green); }
+  .badge.err { background: rgba(248, 113, 113, .15); color: var(--red); }
+  .badge.warn{ background: rgba(251, 191, 36, .15); color: var(--amber); }
+  .mono { font-family: ui-monospace, "JetBrains Mono", Consolas, monospace; }
+
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin-top: 8px; font-size: 12.5px; }
+  .kv div:nth-child(odd) { color: var(--muted); }
+  .kv div:nth-child(even) { color: var(--text); }
+
+  /* command log */
+  #cmd-log { list-style: none; margin: 0 0 14px; padding: 0; max-height: 260px; overflow-y: auto; }
+  #cmd-log li {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 9px;
+    padding: 8px 10px; margin-bottom: 6px; font-size: 12px;
+  }
+  #cmd-log .t { color: var(--faint); font-size: 11px; margin-right: 6px; }
+  #cmd-log .rid { color: var(--faint); font-size: 10.5px; margin-top: 3px; }
+  .empty { color: var(--faint); font-size: 12.5px; padding: 6px 2px; }
+
+  details { margin-top: 8px; }
+  summary { color: var(--muted); font-size: 12px; cursor: pointer; padding: 4px 0; user-select: none; }
+  summary:hover { color: var(--text); }
+  details .preview { margin-top: 6px; max-height: 220px; overflow: auto; }
+
+  footer { color: var(--faint); font-size: 11.5px; margin-top: 22px; text-align: center; }
+  a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <h1>🌡️ Climate Control</h1>
+      <div class="subtitle">IoT Auto Climate Control — transmit / receive node dashboard</div>
+    </div>
+    <div class="pills">
+      <span class="pill" id="pill-api"><span class="dot"></span>API</span>
+      <span class="pill" id="pill-mqtt"><span class="dot"></span>MQTT</span>
+      <span class="pill" id="pill-tx"><span class="dot"></span>Transmitter</span>
+      <span class="pill" id="pill-rx"><span class="dot"></span>Receiver</span>
+      <span class="pill time" id="pill-updated">—</span>
+    </div>
+  </header>
+
+  <div class="apibar">
+    <span>Consumer API:</span>
+    <input id="api-base" spellcheck="false" placeholder="http://localhost:8002">
+    <button id="api-save">Apply</button>
+    <span id="api-msg"></span>
+  </div>
+
+  <!-- ================= live state cards ================= -->
+  <section class="cards">
+    <div class="card"><div class="cl">Room temp</div><div class="cv"><span id="v-temp">—</span><span class="cu">°C</span></div><div class="cs" id="s-temp">waiting for data…</div></div>
+    <div class="card"><div class="cl">AC setpoint</div><div class="cv"><span id="v-target">—</span><span class="cu">°C</span></div><div class="cs" id="s-target">encoded into IR frame</div></div>
+    <div class="card"><div class="cl">AC decoded (receiver)</div><div class="cv"><span id="v-rxtemp">—</span><span class="cu">°C</span></div><div class="cs" id="s-rxtemp">—</div></div>
+    <div class="card"><div class="cl">Humidity</div><div class="cv"><span id="v-hum">—</span><span class="cu">%</span></div><div class="cs" id="s-hum">—</div></div>
+    <div class="card"><div class="cl">Fan speed</div><div class="cv" id="v-fan">—</div><div class="cs" id="s-fan">—</div></div>
+    <div class="card"><div class="cl">Relay / AC power</div><div class="cv" id="v-relay">—</div><div class="cs" id="s-relay">—</div></div>
+    <div class="card"><div class="cl">Motion</div><div class="cv" id="v-motion">—</div><div class="cs" id="s-motion">—</div></div>
+    <div class="card"><div class="cl">Sensor</div><div class="cv" id="v-sensor">—</div><div class="cs" id="s-sensor">DHT11</div></div>
+    <div class="card"><div class="cl">Override</div><div class="cv" id="v-override">—</div><div class="cs" id="s-override">—</div></div>
+    <div class="card"><div class="cl">Last IR frame</div><div class="cv mono" id="v-ir" style="font-size:15px">—</div><div class="cs" id="s-ir">—</div></div>
+    <div class="card"><div class="cl">Transmitter uptime</div><div class="cv" id="v-uptime" style="font-size:17px">—</div><div class="cs" id="s-uptime">—</div></div>
+    <div class="card"><div class="cl">Outside weather</div><div class="cv"><span id="v-weather">—</span><span class="cu" id="u-weather"></span></div><div class="cs" id="s-weather">—</div></div>
+  </section>
+
+  <!-- ================= charts ================= -->
+  <section class="charts">
+    <div class="chart-card wide">
+      <h2>Temperature — room vs setpoint</h2>
+      <div class="chart-wrap"><canvas id="chart-temp"></canvas></div>
+      <div class="chart-note">Room temperature from the DHT11, the setpoint encoded into the IR frame, and the setpoint decoded by the receiver (last 100 samples each).</div>
+    </div>
+    <div class="chart-card">
+      <h2>Humidity</h2>
+      <div class="chart-wrap"><canvas id="chart-hum"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h2>Device state</h2>
+      <div class="chart-wrap"><canvas id="chart-state"></canvas></div>
+    </div>
+  </section>
+
+  <!-- ================= control + ack ================= -->
+  <section class="lower">
+
+    <div class="panel">
+      <h2>🎛️ Control — manual override</h2>
+      <div class="seg">
+        <input type="radio" name="mode" id="mode-override" value="override" checked><label for="mode-override">Override</label>
+        <input type="radio" name="mode" id="mode-release" value="release"><label for="mode-release">Release</label>
+        <input type="radio" name="mode" id="mode-raw" value="raw"><label for="mode-raw">Raw IR</label>
+      </div>
+
+      <div id="grp-override" class="grp">
+        <div class="row">
+          <label for="ctl-relay">AC relay</label>
+          <select id="ctl-relay">
+            <option value="keep">keep current</option>
+            <option value="on">on</option>
+            <option value="off">off</option>
+          </select>
+        </div>
+        <div class="temp-row">
+          <label for="ctl-temp"><input type="checkbox" id="ctl-temp-enable" style="accent-color:var(--accent)"> Setpoint</label>
+          <input type="range" id="ctl-temp" min="16" max="30" step="1" value="24" disabled>
+          <div class="temp-val" id="ctl-temp-val">24 °C</div>
+        </div>
+        <div class="row">
+          <label for="ctl-fan">Fan speed</label>
+          <select id="ctl-fan">
+            <option value="keep">keep current</option>
+            <option value="off">off</option>
+            <option value="low">low</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+          </select>
+        </div>
+        <div class="hint">Omitted fields keep their current value. The fan is forced off when the relay is off.</div>
+      </div>
+
+      <div id="grp-raw" class="grp hidden">
+        <div class="row">
+          <label for="ctl-raw">NEC frame</label>
+          <input type="text" id="ctl-raw" class="mono" placeholder="0xA1DF15EA" spellcheck="false" style="width:170px">
+        </div>
+        <div class="hint">32-bit hex frame. Valid AC frames become an override (source <span class="mono">mqtt-raw</span>); anything else is transmitted once for testing other NEC devices.</div>
+      </div>
+
+      <div id="grp-release" class="grp hidden">
+        <div class="hint">Clears any active override immediately and resumes the automatic control rules.</div>
+      </div>
+
+      <div id="grp-duration" class="grp">
+        <div class="row"><label>Duration</label><span class="hint" style="margin:0">0 = until released</span></div>
+        <div class="chips" id="dur-chips">
+          <span class="chip" data-d="60">1 min</span>
+          <span class="chip" data-d="300">5 min</span>
+          <span class="chip" data-d="1800">30 min</span>
+          <span class="chip" data-d="3600">1 h</span>
+          <span class="chip sel" data-d="86400">24 h</span>
+          <span class="chip" data-d="0">until release</span>
+        </div>
+        <div class="row" style="margin-top:9px">
+          <label for="ctl-duration">Custom (seconds)</label>
+          <input type="number" id="ctl-duration" min="0" max="86400" step="1" value="60" style="width:90px">
+        </div>
+      </div>
+
+      <div class="preview">
+        <div class="ph">Payload preview (published to <span class="mono">transmit/command</span>)</div>
+        <pre id="payload-preview">{}</pre>
+      </div>
+
+      <button class="primary" id="send">Send command</button>
+      <div id="send-result" class="result"></div>
+    </div>
+
+    <div class="panel">
+      <h2>📟 Latest command ACK</h2>
+      <div id="ack-panel" class="empty">No command ACK received yet.</div>
+
+      <h2 style="margin-top:18px">🧾 Command log</h2>
+      <ul id="cmd-log"><li class="empty" style="border:none;background:none;padding:0">No commands sent from this dashboard yet.</li></ul>
+
+      <h2 style="margin-top:18px">📦 Raw payloads</h2>
+      <details><summary>Latest transmit/data</summary><div class="preview"><pre id="raw-tx">—</pre></div></details>
+      <details><summary>Latest receive/state</summary><div class="preview"><pre id="raw-rx">—</pre></div></details>
+      <details><summary>Latest api/weather</summary><div class="preview"><pre id="raw-weather">—</pre></div></details>
+    </div>
+
+  </section>
+
+  <footer>
+    Data flows over MQTT → consumer ring buffers (100 samples) → this page polls the REST API every 3 s.
+    Commands take the same path as <span class="mono">tools/ir_override.py</span>.
+  </footer>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   Configuration
+   ============================================================ */
+const DEFAULT_API =
+  location.protocol.startsWith("http")
+    ? location.origin
+    : "http://localhost:8002";
+let API = localStorage.getItem("climate.apiBase") || DEFAULT_API;
+
+const FAN_NAMES = ["off", "low", "medium", "high"];
+const FAN_INDEX = { off: 0, low: 1, medium: 2, high: 3 };
+
+const $ = (sel) => document.querySelector(sel);
+const S = {
+  tx: null, rx: null, txStatus: null, rxStatus: null,
+  weather: null, ack: null, health: null, apiOnline: true,
+};
+
+/* ============================================================
+   Small helpers
+   ============================================================ */
+function setPill(el, state, text) {
+  el.classList.remove("on", "off");
+  if (state === true) el.classList.add("on");
+  if (state === false) el.classList.add("off");
+  if (text !== undefined) el.childNodes[el.childNodes.length - 1].textContent = " " + text;
+}
+
+async function jget(path) {
+  try {
+    const r = await fetch(API + path, { headers: { Accept: "application/json" } });
+    if (r.status === 404) return { data: null };
+    if (!r.ok) return { err: r.status + " " + r.statusText };
+    return { data: await r.json() };
+  } catch (e) {
+    return { err: e.message };
+  }
+}
+
+function fmtTime(epochSec) {
+  if (!epochSec || epochSec <= 0) return "—";
+  return new Date(epochSec * 1000).toLocaleTimeString([], { hour12: false });
+}
+
+function fmtUptime(ms) {
+  if (!Number.isFinite(ms) || ms < 0) return "—";
+  const s = Math.floor(ms / 1000);
+  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60), sec = s % 60;
+  return [d && d + "d", h + "h", m + "m", sec + "s"].filter(Boolean).join(" ");
+}
+
+function fmtDur(s) {
+  if (!Number.isFinite(s)) return "—";
+  if (s === 0) return "until release";
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  return [h && h + "h", m && m + "m", sec && sec + "s"].filter(Boolean).join(" ") || s + "s";
+}
+
+function setCard(idVal, idSub, value, sub, cls) {
+  const v = $("#" + idVal), s = $("#" + idSub);
+  if (v) { v.textContent = value; v.className = v.classList.contains("mono") ? "mono " + (cls || "") : (cls || ""); }
+  if (s && sub !== undefined) s.textContent = sub;
+}
+
+/* ============================================================
+   Charts
+   ============================================================ */
+Chart.defaults.color = "#8ea0bd";
+Chart.defaults.borderColor = "rgba(148,163,184,.08)";
+Chart.defaults.font.family = "'Inter','Segoe UI',system-ui,sans-serif";
+Chart.defaults.font.size = 11;
+
+const baseOpts = (yTitle) => ({
+  animation: false,
+  maintainAspectRatio: false,
+  interaction: { mode: "nearest", intersect: false },
+  plugins: {
+    legend: { labels: { boxWidth: 10, boxHeight: 2 } },
+    tooltip: { callbacks: { title: (items) => fmtTime(items[0].parsed.x) } },
+  },
+  scales: {
+    x: {
+      type: "linear",
+      ticks: { maxTicksLimit: 9, callback: (v) => fmtTime(v) },
+      grid: { color: "rgba(148,163,184,.05)" },
+    },
+    y: { title: { display: !!yTitle, text: yTitle }, grid: { color: "rgba(148,163,184,.05)" } },
+  },
+});
+
+const tempChart = new Chart($("#chart-temp"), {
+  type: "line",
+  data: {
+    datasets: [
+      { label: "Room temp", data: [], borderColor: "#22d3ee", backgroundColor: "rgba(34,211,238,.07)", fill: true, pointRadius: 0, borderWidth: 2, tension: .25 },
+      { label: "Setpoint (IR)", data: [], borderColor: "#f59e0b", borderDash: [6, 4], pointRadius: 0, borderWidth: 2, stepped: true },
+      { label: "AC decoded (rx)", data: [], borderColor: "#a78bfa", pointRadius: 0, borderWidth: 2, stepped: true },
+    ],
+  },
+  options: (() => {
+    const o = baseOpts("°C");
+    o.scales.y.suggestedMin = 14; o.scales.y.suggestedMax = 32;
+    o.plugins.tooltip.callbacks.label = (c) => ` ${c.dataset.label}: ${c.parsed.y.toFixed(1)} °C`;
+    return o;
+  })(),
+});
+
+const humChart = new Chart($("#chart-hum"), {
+  type: "line",
+  data: {
+    datasets: [
+      { label: "Humidity", data: [], borderColor: "#4ade80", backgroundColor: "rgba(74,222,128,.07)", fill: true, pointRadius: 0, borderWidth: 2, tension: .25 },
+    ],
+  },
+  options: (() => {
+    const o = baseOpts("%");
+    o.scales.y.suggestedMin = 0; o.scales.y.suggestedMax = 100;
+    o.plugins.tooltip.callbacks.label = (c) => ` Humidity: ${c.parsed.y.toFixed(1)} %`;
+    return o;
+  })(),
+});
+
+const stateChart = new Chart($("#chart-state"), {
+  type: "line",
+  data: {
+    datasets: [
+      { label: "Relay", data: [], borderColor: "#34d399", pointRadius: 0, borderWidth: 1.6, stepped: true, yAxisID: "yBin" },
+      { label: "Motion", data: [], borderColor: "#f472b6", pointRadius: 0, borderWidth: 1.6, stepped: true, yAxisID: "yBin" },
+      { label: "Override", data: [], borderColor: "#fbbf24", pointRadius: 0, borderWidth: 1.6, stepped: true, yAxisID: "yBin" },
+      { label: "AC power (rx)", data: [], borderColor: "#a78bfa", pointRadius: 0, borderWidth: 1.6, stepped: true, yAxisID: "yBin" },
+      { label: "Fan", data: [], borderColor: "#60a5fa", pointRadius: 0, borderWidth: 1.6, stepped: true, yAxisID: "yFan" },
+    ],
+  },
+  options: {
+    animation: false,
+    maintainAspectRatio: false,
+    interaction: { mode: "nearest", intersect: false },
+    plugins: {
+      legend: { labels: { boxWidth: 10, boxHeight: 2 } },
+      tooltip: {
+        callbacks: {
+          title: (items) => fmtTime(items[0].parsed.x),
+          label: (c) => c.dataset.label === "Fan"
+            ? ` Fan: ${FAN_NAMES[c.parsed.y] ?? c.parsed.y}`
+            : ` ${c.dataset.label}: ${c.parsed.y ? "on" : "off"}`,
+        },
+      },
+    },
+    scales: {
+      x: {
+        type: "linear",
+        ticks: { maxTicksLimit: 9, callback: (v) => fmtTime(v) },
+        grid: { color: "rgba(148,163,184,.05)" },
+      },
+      yBin: {
+        min: -0.25, max: 1.55, position: "left",
+        ticks: { stepSize: 1, callback: (v) => (v === 0 ? "off" : v === 1 ? "on" : "") },
+        grid: { color: "rgba(148,163,184,.05)" },
+      },
+      yFan: {
+        min: -0.25, max: 3.7, position: "right",
+        ticks: { stepSize: 1, callback: (v) => FAN_NAMES[v] ?? "" },
+        grid: { drawOnChartArea: false },
+      },
+    },
+  },
+});
+
+/* Build {x,y} points from a FIFO history list. timestamp=0 (NTP not yet
+   synchronised) is replaced by a stable synthetic timeline. */
+function makeSampler(list, interval = 5) {
+  const base = Math.floor(Date.now() / 1000) - list.length * interval;
+  return (pick) => {
+    let prev = base;
+    return list
+      .map((d) => {
+        const ts = Number.isFinite(d.timestamp) && d.timestamp > 0 ? d.timestamp : (prev += interval);
+        const y = pick(d);
+        return y == null || Number.isNaN(y) ? null : { x: ts, y };
+      })
+      .filter((p) => p);
+  };
+}
+
+function refreshCharts(txHist, rxHist) {
+  const sTx = makeSampler(txHist), sRx = makeSampler(rxHist, 60);
+  tempChart.data.datasets[0].data = sTx((d) => d.temp);
+  tempChart.data.datasets[1].data = sTx((d) => d.target_temp);
+  tempChart.data.datasets[2].data = sRx((d) => d.temp);
+  humChart.data.datasets[0].data = sTx((d) => d.hum);
+  stateChart.data.datasets[0].data = sTx((d) => (d.relay_on === true ? 1 : d.relay_on === false ? 0 : null));
+  stateChart.data.datasets[1].data = sTx((d) => (d.motion === true ? 1 : d.motion === false ? 0 : null));
+  stateChart.data.datasets[2].data = sTx((d) => (d.override === true ? 1 : d.override === false ? 0 : null));
+  stateChart.data.datasets[3].data = sRx((d) => (d.ac_power_state === true ? 1 : d.ac_power_state === false ? 0 : null));
+  stateChart.data.datasets[4].data = sTx((d) => (d.fan_speed in FAN_INDEX ? FAN_INDEX[d.fan_speed] : null));
+  tempChart.update(); humChart.update(); stateChart.update();
+}
+
+/* ============================================================
+   Live state rendering
+   ============================================================ */
+function renderPills() {
+  setPill($("#pill-api"), S.apiOnline, S.apiOnline ? "API" : "API unreachable");
+  setPill($("#pill-mqtt"), S.health ? !!S.health.mqtt : false, S.health ? (S.health.mqtt ? "MQTT" : "MQTT down") : "MQTT ?");
+  setPill($("#pill-tx"), S.txStatus ? !!S.txStatus.online : null, S.txStatus ? (S.txStatus.online ? "Transmitter" : "Transmitter offline") : "Transmitter ?");
+  setPill($("#pill-rx"), S.rxStatus ? !!S.rxStatus.online : null, S.rxStatus ? (S.rxStatus.online ? "Receiver" : "Receiver offline") : "Receiver ?");
+  $("#pill-updated").textContent = new Date().toLocaleTimeString([], { hour12: false });
+}
+
+function renderCards() {
+  const tx = S.tx, rx = S.rx;
+
+  // Transmitter telemetry
+  if (tx) {
+    setCard("v-temp", "s-temp", Number.isFinite(tx.temp) ? tx.temp.toFixed(1) : "—",
+      tx.timestamp > 0 ? "sampled " + fmtTime(tx.timestamp) : "NTP not synced");
+    setCard("v-target", "s-target", String(tx.target_temp), "encoded into IR frame", "warn");
+    setCard("v-hum", "s-hum", Number.isFinite(tx.hum) ? tx.hum.toFixed(1) : "—",
+      tx.hum > 50 ? "fan high per rules" : "fan off per rules");
+    setCard("v-fan", "s-fan", tx.fan_speed || "—",
+      tx.relay_on ? "AC running" : "fan forced off (relay off)");
+    setCard("v-relay", "s-relay", tx.relay_on ? "ON" : "OFF", tx.relay_on ? "AC powered" : "AC cut off",
+      tx.relay_on ? "good" : "bad");
+    setCard("v-motion", "s-motion", tx.motion ? "detected" : "idle",
+      tx.warmup ? "PIR warming up" : (tx.motion ? "someone in the room" : "no motion"));
+    setCard("v-sensor", "s-sensor", tx.sensor_ok ? "OK" : "FAIL",
+      tx.sensor_ok ? "DHT11 reading valid" : "reusing last good reading",
+      tx.sensor_ok ? "good" : "bad");
+    setCard("v-ir", "s-ir", tx.ir_code || "—", tx.ir_sent ? "transmitted" : "not sent this sample", "cy");
+    setCard("v-uptime", "s-uptime", fmtUptime(tx.uptime_ms),
+      tx.timestamp > 0 ? "clock " + fmtTime(tx.timestamp) : "");
+
+    const ov = $("#v-override"), ovs = $("#s-override");
+    if (tx.override) {
+      ov.textContent = "ACTIVE"; ov.className = "warn";
+      const src = tx.override_source ? "source " + tx.override_source : "manual";
+      ovs.textContent = tx.override_indefinite
+        ? src + " · until released"
+        : src + " · " + fmtDur(tx.override_remaining_s ?? 0) + " left";
+    } else {
+      ov.textContent = "none"; ov.className = "";
+      ovs.textContent = "automatic rules in control";
+    }
+  }
+
+  // Receiver state
+  if (rx) {
+    setCard("v-rxtemp", "s-rxtemp", Number.isFinite(rx.temp) ? rx.temp.toFixed(1) : "—",
+      (rx.state_valid ? "IR frame valid" : "no valid frame yet") + (rx.source ? " · " + rx.source : ""));
+  }
+
+  // Weather (api/weather — schema not fixed, best-effort OpenWeatherMap parsing)
+  const w = S.weather;
+  const wv = $("#v-weather"), wu = $("#u-weather"), ws = $("#s-weather");
+  if (w) {
+    let t = w.main && Number.isFinite(w.main.temp) ? w.main.temp : null;
+    if (t != null && t > 120) t = t - 273.15; // Kelvin → Celsius
+    const desc = w.weather && w.weather[0] && w.weather[0].description;
+    wv.textContent = t != null ? t.toFixed(1) : "—";
+    wu.textContent = t != null ? "°C" : "";
+    ws.textContent = [desc, w.name, w.main && Number.isFinite(w.main.humidity) ? w.main.humidity + "% RH" : null]
+      .filter(Boolean).join(" · ") || "unrecognised payload — see raw JSON";
+  }
+
+  // Raw payload viewers
+  if (tx) $("#raw-tx").textContent = JSON.stringify(tx, null, 2);
+  if (rx) $("#raw-rx").textContent = JSON.stringify(rx, null, 2);
+  if (S.weather) $("#raw-weather").textContent = JSON.stringify(S.weather, null, 2);
+}
+
+/* ============================================================
+   ACK rendering
+   ============================================================ */
+function ackHtml(ack, sent) {
+  if (!ack) {
+    return `<span class="badge warn">timeout</span>
+      <div class="kv" style="margin-top:8px">
+        <div>Result</div><div>No ACK from the transmitter — it may be offline. The command was still published.</div>
+      </div>`;
+  }
+  const rows = [];
+  rows.push(["Action", ack.action ?? "—"]);
+  if (ack.request_id) rows.push(["Request", `<span class="mono">${ack.request_id}</span>`]);
+  if (ack.override_source) rows.push(["Source", ack.override_source]);
+  if (ack.override) {
+    rows.push(["Override remaining",
+      ack.override_indefinite ? "until released" : fmtDur(ack.override_remaining_s ?? 0)]);
+  }
+  if (ack.applied) {
+    rows.push(["Applied",
+      `relay ${ack.applied.relay_on ? "on" : "off"}, ${ack.applied.target_temp} °C, fan ${ack.applied.fan_speed}`]);
+  }
+  if (ack.ir_code) rows.push(["IR frame", `<span class="mono">${ack.ir_code}</span>`]);
+  if (ack.raw_only) rows.push(["Raw only", "yes — sent as one-shot, rules not suspended"]);
+  if (ack.timestamp) rows.push(["At", fmtTime(ack.timestamp)]);
+  if (ack.error) rows.push(["Error", ack.error]);
+  const badge = ack.ok === false
+    ? `<span class="badge err">rejected</span>`
+    : `<span class="badge ok">ok</span>`;
+  return `${badge}<div class="kv">${rows.map(([k, v]) => `<div>${k}</div><div>${v}</div>`).join("")}</div>`;
+}
+
+function renderAckPanel() {
+  const el = $("#ack-panel");
+  if (S.ack) {
+    el.className = "";
+    el.innerHTML = ackHtml(S.ack);
+  } else {
+    el.className = "empty";
+    el.textContent = "No command ACK received yet.";
+  }
+}
+
+/* ============================================================
+   Polling
+   ============================================================ */
+let polling = false;
+async function fastPoll() {
+  if (document.hidden || polling) return;
+  polling = true;
+  const [health, txs, rxs, tx, rx, weather, ack] = await Promise.all([
+    jget("/health"),
+    jget("/transmit/status/latest"),
+    jget("/receive/status/latest"),
+    jget("/transmit/latest"),
+    jget("/receive/latest"),
+    jget("/weather/latest"),
+    jget("/command/latest"),
+  ]);
+  S.apiOnline = !health.err;
+  if (health.data) S.health = health.data;
+  if (txs.data !== null || !txs.err) S.txStatus = txs.data;
+  if (rxs.data !== null || !rxs.err) S.rxStatus = rxs.data;
+  if (tx.data) S.tx = tx.data;
+  if (rx.data) S.rx = rx.data;
+  if (weather.data) S.weather = weather.data;
+  if (ack.data) S.ack = ack.data;
+  renderPills();
+  renderCards();
+  renderAckPanel();
+  polling = false;
+}
+
+async function slowPoll() {
+  if (document.hidden) return;
+  const [txh, rxh] = await Promise.all([jget("/history/transmit"), jget("/history/receive")]);
+  if (txh.data) refreshCharts(txh.data, rxh.data || []);
+}
+
+setInterval(fastPoll, 3000);
+setInterval(slowPoll, 6000);
+fastPoll();
+slowPoll();
+
+/* ============================================================
+   Control interface
+   ============================================================ */
+function currentDuration() {
+  const v = parseInt($("#ctl-duration").value, 10);
+  return Number.isFinite(v) ? Math.min(86400, Math.max(0, v)) : 60;
+}
+
+function buildCommand() {
+  const mode = document.querySelector('input[name="mode"]:checked').value;
+  const payload = {};
+
+  if (mode === "release") {
+    payload.action = "release";
+    return { payload };
+  }
+
+  const duration = currentDuration();
+  if (duration < 0 || duration > 86400) return { error: "duration must be between 0 and 86400 seconds." };
+
+  if (mode === "raw") {
+    const code = $("#ctl-raw").value.trim();
+    const norm = code.replace(/^0[xX]/, "");
+    if (!/^[0-9a-fA-F]{1,8}$/.test(norm)) return { error: "IR code must be 1–8 hex digits, e.g. 0xA1DF15EA." };
+    payload.action = "raw";
+    payload.ir_code = code;
+    payload.duration_s = duration;
+    return { payload };
+  }
+
+  // mode === "override"
+  payload.action = "override";
+  payload.duration_s = duration;
+  const relay = $("#ctl-relay").value;
+  if (relay !== "keep") payload.relay_on = relay === "on";
+  if ($("#ctl-temp-enable").checked) payload.target_temp = parseInt($("#ctl-temp").value, 10);
+  const fan = $("#ctl-fan").value;
+  if (fan !== "keep") payload.fan_speed = fan;
+  if (!("relay_on" in payload) && !("target_temp" in payload) && !("fan_speed" in payload)) {
+    return { error: "Choose at least one override field: relay, setpoint or fan." };
+  }
+  if (payload.target_temp != null && (payload.target_temp < 16 || payload.target_temp > 30)) {
+    return { error: "target temp must be between 16 and 30 °C." };
+  }
+  return { payload };
+}
+
+function describeCommand(p) {
+  if (p.action === "release") return "release override";
+  const parts = [];
+  if ("relay_on" in p) parts.push("relay " + (p.relay_on ? "on" : "off"));
+  if ("target_temp" in p) parts.push(p.target_temp + " °C");
+  if ("fan_speed" in p) parts.push("fan " + p.fan_speed);
+  if ("ir_code" in p) parts.push("raw " + p.ir_code);
+  parts.push(fmtDur(p.duration_s ?? 0));
+  return parts.join(", ");
+}
+
+function renderPreview() {
+  const { payload, error } = buildCommand();
+  const el = $("#payload-preview");
+  if (error) el.textContent = "⚠ " + error;
+  else el.textContent = JSON.stringify(payload, null, 2);
+}
+
+const cmdLog = [];
+function logCommand(payload, ack, status, detail) {
+  cmdLog.unshift({
+    time: new Date().toLocaleTimeString([], { hour12: false }),
+    desc: describeCommand(payload),
+    status, detail, rid: payload.request_id,
+  });
+  if (cmdLog.length > 20) cmdLog.pop();
+  const ul = $("#cmd-log");
+  ul.innerHTML = cmdLog.map((e) => {
+    const badge = e.status === "ok" ? "ok" : e.status === "timeout" ? "warn" : "err";
+    const label = e.status === "ok" ? "ok" : e.status === "timeout" ? "no ack" : e.status;
+    return `<li>
+      <span class="t">${e.time}</span> ${e.desc}
+      <span class="badge ${badge}" style="float:right">${label}</span>
+      ${e.rid ? `<div class="rid mono">${e.rid}</div>` : ""}
+      ${e.detail ? `<div class="rid">${e.detail}</div>` : ""}
+    </li>`;
+  }).join("");
+}
+
+async function sendCommand() {
+  const built = buildCommand();
+  const result = $("#send-result");
+  result.className = "result show err";
+  if (built.error) {
+    result.textContent = "⚠ " + built.error;
+    return;
+  }
+  const payload = built.payload;
+  payload.request_id = "dash-" + Math.floor(Date.now() / 1000) + "-" +
+    Math.random().toString(16).slice(2, 8);
+
+  const btn = $("#send");
+  btn.disabled = true;
+  btn.textContent = "Sending…";
+  try {
+    const r = await fetch(API + "/command", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      result.className = "result show err";
+      result.textContent = "⚠ " + (data.detail || r.statusText);
+      logCommand(payload, null, "rejected", data.detail || r.statusText);
+    } else if (data.ack) {
+      const ok = data.ack.ok !== false;
+      result.className = "result show " + (ok ? "ok" : "err");
+      result.innerHTML = ackHtml(data.ack, data.sent);
+      logCommand(payload, data.ack, ok ? "ok" : "error", data.ack.error);
+    } else {
+      result.className = "result show warn";
+      result.innerHTML = ackHtml(null, data.sent);
+      logCommand(payload, null, "timeout", data.detail);
+    }
+  } catch (e) {
+    result.className = "result show err";
+    result.textContent = "⚠ Could not reach the consumer API: " + e.message;
+    logCommand(payload, null, "network error", e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Send command";
+    renderPreview();
+  }
+}
+
+/* ---------- control form wiring ---------- */
+document.querySelectorAll('input[name="mode"]').forEach((r) =>
+  r.addEventListener("change", () => {
+    const mode = document.querySelector('input[name="mode"]:checked').value;
+    $("#grp-override").classList.toggle("hidden", mode !== "override");
+    $("#grp-raw").classList.toggle("hidden", mode !== "raw");
+    $("#grp-release").classList.toggle("hidden", mode !== "release");
+    $("#grp-duration").classList.toggle("hidden", mode === "release");
+    renderPreview();
+  })
+);
+
+$("#ctl-temp-enable").addEventListener("change", (e) => {
+  $("#ctl-temp").disabled = !e.target.checked;
+  renderPreview();
+});
+$("#ctl-temp").addEventListener("input", () => {
+  $("#ctl-temp-val").textContent = $("#ctl-temp").value + " °C";
+  renderPreview();
+});
+["ctl-relay", "ctl-fan"].forEach((id) => $("#" + id).addEventListener("change", renderPreview));
+$("#ctl-raw").addEventListener("input", renderPreview);
+$("#ctl-duration").addEventListener("input", () => {
+  document.querySelectorAll("#dur-chips .chip").forEach((c) =>
+    c.classList.toggle("sel", parseInt(c.dataset.d, 10) === currentDuration()));
+  renderPreview();
+});
+document.querySelectorAll("#dur-chips .chip").forEach((chip) =>
+  chip.addEventListener("click", () => {
+    document.querySelectorAll("#dur-chips .chip").forEach((c) => c.classList.remove("sel"));
+    chip.classList.add("sel");
+    $("#ctl-duration").value = chip.dataset.d;
+    renderPreview();
+  })
+);
+$("#send").addEventListener("click", sendCommand);
+
+/* ---------- API base configuration ---------- */
+$("#api-base").value = API;
+function applyApiBase(showMsg) {
+  const v = $("#api-base").value.trim().replace(/\/+$/, "");
+  if (!v) return;
+  API = v;
+  localStorage.setItem("climate.apiBase", v);
+  if (showMsg) {
+    $("#api-msg").textContent = "saved — reconnecting…";
+    setTimeout(() => ($("#api-msg").textContent = ""), 2500);
+  }
+  fastPoll();
+  slowPoll();
+}
+$("#api-save").addEventListener("click", () => applyApiBase(true));
+$("#api-base").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") applyApiBase(true);
+});
+
+renderPreview();
+</script>
+</body>
+</html>

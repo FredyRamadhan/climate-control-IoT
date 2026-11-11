@@ -4,7 +4,9 @@
 #include <IRremoteESP8266.h>
 #include <IRsend.h>
 #include <ArduinoJson.h>
+#include <ctype.h>
 #include <math.h>
+#include <stdlib.h>
 #include <time.h>
 #include "secrets.h"
 
@@ -26,10 +28,17 @@
 
 #define MQTT_TOPIC_DATA       "transmit/data"
 #define MQTT_TOPIC_STATUS     "transmit/status"
+#define MQTT_TOPIC_CMD        "transmit/command"
+#define MQTT_TOPIC_CMD_ACK    "transmit/command/ack"
 
 // Rule windows from plan.md
 #define MOTION_RECENT_MS      300000UL  // 5 minutes
 #define MOTION_IDLE_MS        600000UL  // 10 minutes
+
+// Manual override defaults
+#define OVERRIDE_DEFAULT_SEC  60UL      // duration used when duration_s is omitted
+#define OVERRIDE_MAX_SEC      86400UL   // reject durations longer than 24 hours
+#define COMMAND_BUFFER_SIZE   384       // max JSON command size accepted over MQTT
 
 // Re-send the same IR state periodically so a receiver that rebooted/missed a
 // frame can resynchronise. State changes are always sent immediately.
@@ -97,6 +106,19 @@ unsigned long lastPirPollMs = 0;
 float lastTempC = 24.0f;
 float lastHum = 50.0f;
 
+// Manual override state
+bool overrideActive = false;
+bool overrideIndefinite = false;
+unsigned long overrideStartMs = 0;
+uint32_t overrideDurationMs = 0;
+const char* overrideSource = nullptr;
+
+// Pending MQTT command. The callback only copies the payload; the main loop
+// parses and applies it so IR transmission never happens inside the callback.
+char pendingCommand[COMMAND_BUFFER_SIZE];
+bool pendingCommandReady = false;
+bool pendingCommandOverflow = false;
+
 // Timers
 unsigned long bootMillis = 0;
 unsigned long lastSampleMs = 0;
@@ -141,6 +163,36 @@ uint32_t buildIrFrame() {
          (uint32_t)(uint8_t)(~targetTempC);
 }
 
+bool decodeAcFrame(uint32_t rawValue, bool &outPowerOn, uint8_t &outTargetTemp,
+                   FanSpeed &outFanSpeed) {
+  uint8_t header = (rawValue >> 24) & 0xFF;
+  uint8_t flags = (rawValue >> 16) & 0xFF;
+  uint8_t tempByte = (rawValue >> 8) & 0xFF;
+  uint8_t invertedTemp = rawValue & 0xFF;
+
+  if (header != AC_IR_HEADER) {
+    return false;
+  }
+  if ((uint8_t)(~tempByte) != invertedTemp) {
+    return false;
+  }
+  if (tempByte < AC_IR_MIN_TEMP || tempByte > AC_IR_MAX_TEMP) {
+    return false;
+  }
+
+  uint8_t flagsWithoutCrc = flags & (AC_IR_RELAY_BIT | AC_IR_FAN_MASK);
+  uint8_t receivedCrc = (flags >> AC_IR_CRC_SHIFT) & AC_IR_CRC_MASK;
+  uint8_t expectedCrc = (AC_IR_HEADER ^ flagsWithoutCrc ^ tempByte) & AC_IR_CRC_MASK;
+  if (receivedCrc != expectedCrc) {
+    return false;
+  }
+
+  outPowerOn = (flags & AC_IR_RELAY_BIT) != 0;
+  outTargetTemp = tempByte;
+  outFanSpeed = (FanSpeed)(flags & AC_IR_FAN_MASK);
+  return true;
+}
+
 void printIrFrame(uint32_t frame) {
   char hexStr[11];
   snprintf(hexStr, sizeof(hexStr), "0x%08X", frame);
@@ -177,6 +229,178 @@ bool sendIrIfNeeded(bool force) {
   Serial.println(fanSpeedToString(fanSpeed));
 
   return true;
+}
+
+bool parseFanSpeed(const char* value, FanSpeed &outSpeed) {
+  if (value == nullptr) {
+    return false;
+  }
+  if (strcmp(value, "off") == 0) {
+    outSpeed = FAN_OFF;
+    return true;
+  }
+  if (strcmp(value, "low") == 0) {
+    outSpeed = FAN_LOW;
+    return true;
+  }
+  if (strcmp(value, "medium") == 0) {
+    outSpeed = FAN_MEDIUM;
+    return true;
+  }
+  if (strcmp(value, "high") == 0) {
+    outSpeed = FAN_HIGH;
+    return true;
+  }
+  return false;
+}
+
+bool parseHex32(const char* text, uint32_t &outValue) {
+  if (text == nullptr) {
+    return false;
+  }
+
+  while (*text == ' ') {
+    text++;
+  }
+  if (text[0] == '0' && (text[1] == 'x' || text[1] == 'X')) {
+    text += 2;
+  }
+
+  size_t length = strlen(text);
+  if (length == 0 || length > 8) {
+    return false;
+  }
+  for (size_t i = 0; i < length; i++) {
+    if (!isxdigit((unsigned char)text[i])) {
+      return false;
+    }
+  }
+
+  outValue = (uint32_t)strtoul(text, nullptr, 16);
+  return true;
+}
+
+bool parseDurationSeconds(JsonDocument &doc, uint32_t &outSeconds) {
+  outSeconds = (uint32_t)OVERRIDE_DEFAULT_SEC;
+  if (doc["duration_s"].isNull()) {
+    return true;
+  }
+  if (!doc["duration_s"].is<long>()) {
+    return false;
+  }
+
+  long seconds = doc["duration_s"].as<long>();
+  if (seconds < 0 || seconds > (long)OVERRIDE_MAX_SEC) {
+    return false;
+  }
+  outSeconds = (uint32_t)seconds;
+  return true;
+}
+
+void beginOverride(uint32_t durationMs, const char* source) {
+  overrideActive = true;
+  overrideIndefinite = (durationMs == 0);
+  overrideStartMs = millis();
+  overrideDurationMs = durationMs;
+  overrideSource = source;
+
+  Serial.print("[CMD] Override active, source=");
+  Serial.print(source);
+  if (overrideIndefinite) {
+    Serial.println(" (indefinite)");
+  } else {
+    Serial.print(" duration=");
+    Serial.print(durationMs / 1000UL);
+    Serial.println("s");
+  }
+}
+
+uint32_t overrideRemainingSeconds() {
+  if (!overrideActive || overrideIndefinite) {
+    return 0;
+  }
+
+  unsigned long elapsed = millis() - overrideStartMs;
+  if (elapsed >= overrideDurationMs) {
+    return 0;
+  }
+  return (uint32_t)((overrideDurationMs - elapsed + 999UL) / 1000UL);
+}
+
+void updateOverrideExpiry() {
+  if (!overrideActive || overrideIndefinite) {
+    return;
+  }
+  if ((millis() - overrideStartMs) < overrideDurationMs) {
+    return;
+  }
+
+  overrideActive = false;
+  overrideIndefinite = false;
+  overrideDurationMs = 0;
+  overrideSource = nullptr;
+  Serial.println("[CMD] Override expired; automatic rules resumed.");
+}
+
+void publishCommandAck(const char* requestId, bool ok, const char* action,
+                       const char* error, bool rawOnly, const char* irCodeHex) {
+  if (!mqttClient.connected()) {
+    return;
+  }
+
+  JsonDocument doc;
+  doc["ok"] = ok;
+  if (requestId != nullptr && requestId[0] != '\0') {
+    doc["request_id"] = requestId;
+  }
+  if (action != nullptr && action[0] != '\0') {
+    doc["action"] = action;
+  }
+  doc["override"] = overrideActive;
+  doc["override_indefinite"] = overrideIndefinite;
+  doc["raw_only"] = rawOnly;
+
+  if (overrideActive) {
+    if (overrideSource != nullptr) {
+      doc["override_source"] = overrideSource;
+    }
+    if (!overrideIndefinite) {
+      doc["override_remaining_s"] = overrideRemainingSeconds();
+    }
+  }
+
+  if (ok && !rawOnly) {
+    JsonObject applied = doc["applied"].to<JsonObject>();
+    applied["relay_on"] = relayOn;
+    applied["target_temp"] = targetTempC;
+    applied["fan_speed"] = fanSpeedToString(fanSpeed);
+  }
+
+  if (irCodeHex != nullptr) {
+    doc["ir_code"] = irCodeHex;
+  } else if (ok && !rawOnly) {
+    char code[11];
+    snprintf(code, sizeof(code), "0x%08X", lastIrFrame);
+    doc["ir_code"] = code;
+  }
+
+  if (error != nullptr) {
+    doc["error"] = error;
+  }
+  doc["timestamp"] = getTimestamp();
+
+  char jsonBuffer[384];
+  size_t length = serializeJson(doc, jsonBuffer, sizeof(jsonBuffer));
+  if (length == 0) {
+    Serial.println("[CMD] Failed to serialize ACK.");
+    return;
+  }
+
+  bool published = mqttClient.publish(MQTT_TOPIC_CMD_ACK, jsonBuffer, false);
+  Serial.print("[MQTT] ");
+  Serial.print(MQTT_TOPIC_CMD_ACK);
+  Serial.print(published ? " -> " : " FAILED -> ");
+  Serial.println(jsonBuffer);
 }
 
 void applyControlRules(bool motion, float tempC, float hum) {
@@ -256,6 +480,16 @@ void publishTelemetry(bool motion, float tempC, float hum, bool sensorOk,
   doc["sensor_ok"] = sensorOk;
   doc["ir_sent"] = irSent;
   doc["uptime_ms"] = millis();
+  doc["override"] = overrideActive;
+  if (overrideActive) {
+    if (overrideSource != nullptr) {
+      doc["override_source"] = overrideSource;
+    }
+    doc["override_indefinite"] = overrideIndefinite;
+    if (!overrideIndefinite) {
+      doc["override_remaining_s"] = overrideRemainingSeconds();
+    }
+  }
   if (warmup) {
     doc["warmup"] = true;
   }
@@ -277,6 +511,181 @@ void publishTelemetry(bool motion, float tempC, float hum, bool sensorOk,
   Serial.print(MQTT_TOPIC_DATA);
   Serial.print(published ? " -> " : " FAILED -> ");
   Serial.println(jsonBuffer);
+}
+
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+  if (strcmp(topic, MQTT_TOPIC_CMD) != 0) {
+    return;
+  }
+
+  if (length >= sizeof(pendingCommand)) {
+    pendingCommandOverflow = true;
+    pendingCommandReady = true;
+    return;
+  }
+
+  memcpy(pendingCommand, payload, length);
+  pendingCommand[length] = '\0';
+  pendingCommandOverflow = false;
+  pendingCommandReady = true;
+
+  Serial.print("[CMD] Received on ");
+  Serial.print(topic);
+  Serial.print(": ");
+  Serial.println(pendingCommand);
+}
+
+void processPendingCommand() {
+  if (!pendingCommandReady) {
+    return;
+  }
+  pendingCommandReady = false;
+
+  if (pendingCommandOverflow) {
+    pendingCommandOverflow = false;
+    Serial.println("[CMD] Command payload too large; rejected.");
+    publishCommandAck("", false, "", "command payload too large", false, nullptr);
+    return;
+  }
+
+  JsonDocument doc;
+  DeserializationError err = deserializeJson(doc, pendingCommand);
+  if (err) {
+    Serial.print("[CMD] JSON parse error: ");
+    Serial.println(err.c_str());
+    publishCommandAck("", false, "", "invalid JSON", false, nullptr);
+    return;
+  }
+
+  const char* requestId = doc["request_id"].is<const char*>()
+                              ? doc["request_id"].as<const char*>()
+                              : "";
+  const char* action = doc["action"].is<const char*>()
+                           ? doc["action"].as<const char*>()
+                           : "";
+
+  if (strcmp(action, "override") == 0) {
+    bool newRelay = relayOn;
+    uint8_t newTemp = targetTempC;
+    FanSpeed newFan = fanSpeed;
+    bool hasStateField = false;
+
+    if (!doc["relay_on"].isNull()) {
+      if (!doc["relay_on"].is<bool>()) {
+        publishCommandAck(requestId, false, action, "relay_on must be boolean", false, nullptr);
+        return;
+      }
+      newRelay = doc["relay_on"].as<bool>();
+      hasStateField = true;
+    }
+
+    if (!doc["target_temp"].isNull()) {
+      if (!doc["target_temp"].is<long>()) {
+        publishCommandAck(requestId, false, action, "target_temp must be an integer", false, nullptr);
+        return;
+      }
+      long temp = doc["target_temp"].as<long>();
+      if (temp < AC_IR_MIN_TEMP || temp > AC_IR_MAX_TEMP) {
+        publishCommandAck(requestId, false, action, "target_temp must be 16..30", false, nullptr);
+        return;
+      }
+      newTemp = (uint8_t)temp;
+      hasStateField = true;
+    }
+
+    if (!doc["fan_speed"].isNull()) {
+      if (!doc["fan_speed"].is<const char*>()) {
+        publishCommandAck(requestId, false, action, "fan_speed must be a string", false, nullptr);
+        return;
+      }
+      if (!parseFanSpeed(doc["fan_speed"].as<const char*>(), newFan)) {
+        publishCommandAck(requestId, false, action,
+                          "fan_speed must be off/low/medium/high", false, nullptr);
+        return;
+      }
+      hasStateField = true;
+    }
+
+    if (!hasStateField) {
+      publishCommandAck(requestId, false, action, "no override fields supplied", false, nullptr);
+      return;
+    }
+
+    uint32_t durationSeconds = 0;
+    if (!parseDurationSeconds(doc, durationSeconds)) {
+      publishCommandAck(requestId, false, action, "duration_s must be 0..86400", false, nullptr);
+      return;
+    }
+
+    // Keep the AC state physically consistent for structured commands.
+    if (!newRelay) {
+      newFan = FAN_OFF;
+    }
+
+    relayOn = newRelay;
+    targetTempC = newTemp;
+    fanSpeed = newFan;
+    beginOverride(durationSeconds * 1000UL, "mqtt");
+    sendIrIfNeeded(true);
+    publishCommandAck(requestId, true, action, nullptr, false, nullptr);
+
+  } else if (strcmp(action, "release") == 0) {
+    overrideActive = false;
+    overrideIndefinite = false;
+    overrideDurationMs = 0;
+    overrideSource = nullptr;
+
+    bool warmup = (millis() - bootMillis) < PIR_WARMUP_MS;
+    if (!warmup) {
+      applyControlRules(motionSinceLastSample, lastTempC, lastHum);
+    }
+    sendIrIfNeeded(true);
+    Serial.println("[CMD] Override released.");
+    publishCommandAck(requestId, true, action, nullptr, false, nullptr);
+
+  } else if (strcmp(action, "raw") == 0) {
+    const char* rawText = doc["ir_code"].is<const char*>()
+                              ? doc["ir_code"].as<const char*>()
+                              : "";
+    uint32_t frame = 0;
+    if (!parseHex32(rawText, frame)) {
+      publishCommandAck(requestId, false, action,
+                        "ir_code must be a 32-bit hex string", false, nullptr);
+      return;
+    }
+
+    uint32_t durationSeconds = 0;
+    if (!parseDurationSeconds(doc, durationSeconds)) {
+      publishCommandAck(requestId, false, action, "duration_s must be 0..86400", false, nullptr);
+      return;
+    }
+
+    bool powerOn = false;
+    uint8_t tempC = 24;
+    FanSpeed fan = FAN_OFF;
+    char hexBuffer[11];
+    snprintf(hexBuffer, sizeof(hexBuffer), "0x%08lX", (unsigned long)frame);
+
+    if (decodeAcFrame(frame, powerOn, tempC, fan)) {
+      relayOn = powerOn;
+      targetTempC = tempC;
+      fanSpeed = fan;
+      beginOverride(durationSeconds * 1000UL, "mqtt-raw");
+      sendIrIfNeeded(true);
+      Serial.print("[CMD] Raw AC frame applied: ");
+      Serial.println(hexBuffer);
+      publishCommandAck(requestId, true, action, nullptr, false, nullptr);
+    } else {
+      // Not one of our AC frames: send it once for testing other NEC devices.
+      irSender.sendNEC(frame, 32, 1);
+      Serial.print("[CMD] Raw one-shot IR sent: ");
+      Serial.println(hexBuffer);
+      publishCommandAck(requestId, true, action, nullptr, true, hexBuffer);
+    }
+
+  } else {
+    publishCommandAck(requestId, false, action, "unknown action", false, nullptr);
+  }
 }
 
 void setupWifi() {
@@ -334,6 +743,13 @@ void maintainMqtt() {
   if (connected) {
     Serial.println("[MQTT] Connected.");
     mqttClient.publish(MQTT_TOPIC_STATUS, "{\"online\":true}", true);
+    if (mqttClient.subscribe(MQTT_TOPIC_CMD, 1)) {
+      Serial.print("[MQTT] Subscribed to ");
+      Serial.println(MQTT_TOPIC_CMD);
+    } else {
+      Serial.print("[MQTT] Failed to subscribe to ");
+      Serial.println(MQTT_TOPIC_CMD);
+    }
   } else {
     Serial.print("[MQTT] Connection failed, rc=");
     Serial.print(mqttClient.state());
@@ -369,6 +785,7 @@ void setup() {
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer, "time.google.com");
 
   mqttClient.setServer(MQTT_HOST, MQTT_PORT);
+  mqttClient.setCallback(mqttCallback);
   mqttClient.setBufferSize(512);
   mqttClient.setKeepAlive(15);
   mqttClient.setSocketTimeout(3);
@@ -398,6 +815,8 @@ void loop() {
     maintainMqtt();
   }
   mqttClient.loop();
+  processPendingCommand();
+  updateOverrideExpiry();
 
   now = millis();
   if (now - lastSampleMs < SAMPLE_INTERVAL_MS) {
@@ -422,7 +841,7 @@ void loop() {
   bool sensorOk = tempOk && humOk;
 
   bool warmup = (now - bootMillis) < PIR_WARMUP_MS;
-  if (!warmup) {
+  if (!warmup && !overrideActive) {
     applyControlRules(motion, lastTempC, lastHum);
   }
 
