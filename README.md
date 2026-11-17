@@ -2,28 +2,38 @@
 
 An IoT automation system for conventional air conditioners based on PIR motion occupancy, ambient temperature/humidity metrics, and external weather data fetched via the OpenWeatherMap API over an authenticated MQTT broker.
 
-Detailed specifications and implementation audit documents:
-- [Specification Sheet (`specsheet.md`)](./specsheet.md)
-- [Production Handover & Audit Document (`handover.md`)](./handover.md)
+Comprehensive multi-page documentation and technical specifications:
+- [System Documentation Hub (`docs/README.md`)](./docs/README.md)
+  - [System Architecture & Topology (`docs/system-architecture.md`)](./docs/system-architecture.md)
+  - [MQTT Wire Protocol & Payloads (`docs/mqtt-protocol-and-topics.md`)](./docs/mqtt-protocol-and-topics.md)
+  - [Hardware Specifications & Firmware (`docs/hardware-and-firmware.md`)](./docs/hardware-and-firmware.md)
+  - [Consumer Backend & REST API (`docs/consumer-backend-api.md`)](./docs/consumer-backend-api.md)
+  - [Frontend Dashboard & Web Application (`docs/frontend-dashboard.md`)](./docs/frontend-dashboard.md)
+  - [Analytics, ML & Streamlit Hub (`docs/analytics-and-ml.md`)](./docs/analytics-and-ml.md)
+  - [Message Broker & Infrastructure (`docs/broker-and-infrastructure.md`)](./docs/broker-and-infrastructure.md)
+  - [Utilities, CLI Tools & Testing (`docs/utilities-and-testing.md`)](./docs/utilities-and-testing.md)
 
 ---
 
 ## Architecture Overview
 
 ```text
-[ Transmitter Node (ESP8266) ] -------- IR Command (38 kHz NEC) --------> [ AC Unit ]
-     |                                                                         ^
-     | (transmit/data)                                                         | (Mains Relay)
-     v                                                                         |
-[ MQTT Broker (Mosquitto 2) ] <---------------------------------------- [ Receiver Node (ESP8266) ]
-     ^           | (transmit/data, receive/ack, api/weather)
-     |           v
-[ API-Producer ]   [ Consumer Node (FastAPI REST API) ]
-(OpenWeatherMap)      ├── GET /health
-                      ├── GET /transmit/latest
-                      ├── GET /receive/latest
-                      ├── GET /weather/latest
-                      └── GET /history/{topic}
+[ Room Lighting ] <-- (GPIO12 relay: occupancy, 2h idle-off) -- [ Transmitter Node (ESP8266) ] -- 38 kHz NEC IR --> [ AC Unit ]
+                                                |   \                                              (IR-driven only, no mains relay)
+                                                |    \-- same IR frames (feedback decode) --> [ Receiver Node (ESP8266) ]
+                                                | (transmit/data)                                   | (receive/state = decoded IR)
+                                                v                                                   v
+                                    [ MQTT Broker (Mosquitto 2) ] <--------------------------------+
+                                         ^           | (transmit/data, receive/state, api/weather)
+                                         |           v
+                                    [ API-Producer ]   [ Consumer Node (Express 5 REST API & Dashboard) ]
+                                    (OpenWeatherMap)      ├── GET /api/health
+                                                          ├── GET /api/dashboard
+                                                          ├── GET /api/transmit/latest
+                                                          ├── GET /api/receive/latest
+                                                          ├── GET /api/weather/latest
+                                                          ├── GET /api/history/{topic}
+                                                          └── POST /api/command
 ```
 
 ---
@@ -39,7 +49,7 @@ Detailed specifications and implementation audit documents:
 │   ├── transmit.ino            # ESP8266 PIR, DHT11, and KY-005 IR transmitter
 │   └── secrets.h.example       # Template for Wi-Fi and MQTT credentials
 ├── receive-node/
-│   ├── receive.ino             # ESP8266 VS1838B IR receiver & relay controller
+│   ├── receive.ino             # ESP8266 VS1838B IR feedback listener, fan PWM, state LEDs (no AC relay)
 │   └── secrets.h.example       # Template for Wi-Fi and MQTT credentials
 ├── api-producer/
 │   ├── main.py                 # OpenWeatherMap poller and MQTT publisher
