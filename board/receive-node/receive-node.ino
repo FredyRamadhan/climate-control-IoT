@@ -13,9 +13,16 @@
 #define PIN_IR_RECV   14  // D5 (GPIO14) - VS1838B IR receiver OUT
 #define PIN_RELAY     12  // D6 (GPIO12) - 250 VAC opto-isolated relay IN
 #define PIN_LED       13  // D7 (GPIO13) - Status LED (mirrors relay state)
+#define PIN_FAN       5   // D1 (GPIO5)  - 2N2222 NPN transistor Base (PWM speed control)
 
 // Most opto-isolated relay boards are active-LOW. Set false for active-HIGH.
 #define RELAY_ACTIVE_LOW true
+
+// Fan PWM Duty Cycle values (0..1023 on ESP8266)
+#define FAN_PWM_OFF   0
+#define FAN_PWM_LOW   341   // ~33% duty cycle (low speed)
+#define FAN_PWM_MED   682   // ~67% duty cycle (medium speed)
+#define FAN_PWM_HIGH  1023  // 100% duty cycle (high speed)
 
 // ==========================================
 // Constants & Configuration
@@ -70,6 +77,7 @@ decode_results results;
 bool acPowerState = false;
 uint8_t targetTempC = 24;
 FanSpeed fanSpeed = FAN_OFF;
+uint16_t fanPwm = FAN_PWM_OFF;
 bool stateValid = false;
 
 bool relayState = false;
@@ -105,6 +113,37 @@ void setRelay(bool state) {
   if (changed) {
     Serial.print("[Relay] ");
     Serial.println(state ? "ON" : "OFF");
+  }
+}
+
+void setFanSpeed(FanSpeed speed) {
+  uint16_t pwm = FAN_PWM_OFF;
+  switch (speed) {
+    case FAN_LOW:
+      pwm = FAN_PWM_LOW;
+      break;
+    case FAN_MEDIUM:
+      pwm = FAN_PWM_MED;
+      break;
+    case FAN_HIGH:
+      pwm = FAN_PWM_HIGH;
+      break;
+    case FAN_OFF:
+    default:
+      pwm = FAN_PWM_OFF;
+      break;
+  }
+
+  bool changed = (fanPwm != pwm);
+  fanPwm = pwm;
+  analogWrite(PIN_FAN, pwm);
+
+  if (changed) {
+    Serial.print("[Fan] Speed set to ");
+    Serial.print(fanSpeedToString(speed));
+    Serial.print(" (PWM: ");
+    Serial.print(pwm);
+    Serial.println("/1023)");
   }
 }
 
@@ -155,6 +194,7 @@ void publishState(const char* source) {
   doc["ac_power_state"] = acPowerState;
   doc["temp"] = (float)targetTempC;
   doc["fan_speed"] = fanSpeedToString(fanSpeed);
+  doc["fan_pwm"] = fanPwm;
   doc["timestamp"] = getTimestamp();
   doc["state_valid"] = stateValid;
   doc["source"] = source;
@@ -187,6 +227,7 @@ void applyDecodedState(bool powerOn, uint8_t tempC, FanSpeed fan) {
   stateValid = true;
 
   setRelay(acPowerState);
+  setFanSpeed(fanSpeed);
 
   Serial.print("[AC] power=");
   Serial.print(acPowerState ? "on" : "off");
@@ -279,6 +320,11 @@ void setup() {
   pinMode(PIN_RELAY, OUTPUT);
   pinMode(PIN_LED, OUTPUT);
   setRelay(false);
+
+  pinMode(PIN_FAN, OUTPUT);
+  analogWriteRange(1023);
+  analogWriteFreq(1000);
+  setFanSpeed(FAN_OFF);
 
   irReceiver.enableIRIn();
 

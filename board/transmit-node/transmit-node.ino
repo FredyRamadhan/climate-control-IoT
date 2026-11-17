@@ -13,10 +13,14 @@
 // ==========================================
 // Hardware Pin Mapping (NodeMCU v2 / D1 mini)
 // ==========================================
-#define PIN_PIR       14  // D5 (GPIO14) - HC-SR501 PIR sensor
-#define PIN_DHT       2   // D4 (GPIO2)  - DHT11 sensor
-#define PIN_IR_EMIT   4   // D2 (GPIO4)  - KY-005 IR LED emitter
-#define PIN_LED       16  // D0 (GPIO16) - Motion status indicator LED
+#define PIN_PIR          14  // D5 (GPIO14) - HC-SR501 PIR sensor
+#define PIN_DHT          2   // D4 (GPIO2)  - DHT11 sensor
+#define PIN_IR_EMIT      4   // D2 (GPIO4)  - KY-005 IR LED emitter
+#define PIN_LED          16  // D0 (GPIO16) - Motion status indicator LED
+#define PIN_LIGHT_RELAY  12  // D6 (GPIO12) - Relay actuator for lightbulb switch
+
+// Most opto-isolated relay boards are active-LOW. Set false for active-HIGH.
+#define LIGHT_RELAY_ACTIVE_LOW true
 
 // ==========================================
 // Constants & Configuration
@@ -32,8 +36,9 @@
 #define MQTT_TOPIC_CMD_ACK    "transmit/command/ack"
 
 // Rule windows from plan.md
-#define MOTION_RECENT_MS      300000UL  // 5 minutes
-#define MOTION_IDLE_MS        600000UL  // 10 minutes
+#define MOTION_RECENT_MS      300000UL   // 5 minutes
+#define MOTION_IDLE_MS        600000UL   // 10 minutes
+#define LIGHT_IDLE_MS         7200000UL  // 2 hours idle auto turn-off for light (2 * 60 * 60 * 1000 ms)
 
 // Manual override defaults
 #define OVERRIDE_DEFAULT_SEC  60UL      // duration used when duration_s is omitted
@@ -94,6 +99,7 @@ IRsend irSender(PIN_IR_EMIT);
 
 // Rule engine state
 bool relayOn = false;                 // AC power relay state (also sent via IR)
+bool lightRelayOn = false;            // Lightbulb relay actuator state
 uint8_t targetTempC = 24;             // AC target/setpoint temperature
 FanSpeed fanSpeed = FAN_OFF;
 
@@ -136,6 +142,22 @@ const int   daylightOffset_sec = 0;
 // ==========================================
 // Helpers
 // ==========================================
+void applyControlRules(bool motion, float tempC, float hum);
+
+void setLightRelay(bool state) {
+  bool changed = (state != lightRelayOn);
+  lightRelayOn = state;
+  if (LIGHT_RELAY_ACTIVE_LOW) {
+    digitalWrite(PIN_LIGHT_RELAY, state ? LOW : HIGH);
+  } else {
+    digitalWrite(PIN_LIGHT_RELAY, state ? HIGH : LOW);
+  }
+  if (changed) {
+    Serial.print("[Relay] Light bulb ");
+    Serial.println(state ? "ON" : "OFF");
+  }
+}
+
 float round1(float value) {
   return roundf(value * 10.0f) / 10.0f;
 }
@@ -340,6 +362,12 @@ void updateOverrideExpiry() {
   overrideDurationMs = 0;
   overrideSource = nullptr;
   Serial.println("[CMD] Override expired; automatic rules resumed.");
+
+  bool warmup = (millis() - bootMillis) < PIR_WARMUP_MS;
+  if (!warmup) {
+    applyControlRules(motionSinceLastSample, lastTempC, lastHum);
+  }
+  sendIrIfNeeded(true);
 }
 
 void publishCommandAck(const char* requestId, bool ok, const char* action,
@@ -372,6 +400,7 @@ void publishCommandAck(const char* requestId, bool ok, const char* action,
   if (ok && !rawOnly) {
     JsonObject applied = doc["applied"].to<JsonObject>();
     applied["relay_on"] = relayOn;
+    applied["light_on"] = lightRelayOn;
     applied["target_temp"] = targetTempC;
     applied["fan_speed"] = fanSpeedToString(fanSpeed);
   }
@@ -389,7 +418,7 @@ void publishCommandAck(const char* requestId, bool ok, const char* action,
   }
   doc["timestamp"] = getTimestamp();
 
-  char jsonBuffer[384];
+  char jsonBuffer[512];
   size_t length = serializeJson(doc, jsonBuffer, sizeof(jsonBuffer));
   if (length == 0) {
     Serial.println("[CMD] Failed to serialize ACK.");
@@ -405,11 +434,13 @@ void publishCommandAck(const char* requestId, bool ok, const char* action,
 
 void applyControlRules(bool motion, float tempC, float hum) {
   bool prevRelay = relayOn;
+  bool prevLight = lightRelayOn;
   uint8_t prevTarget = targetTempC;
   FanSpeed prevFan = fanSpeed;
 
   bool recent5 = motionWithin(MOTION_RECENT_MS);
   bool recent10 = motionWithin(MOTION_IDLE_MS);
+  bool recent2h = motionWithin(LIGHT_IDLE_MS);
 
   // Rule 1: motion detected and relay off -> relay on.
   if (motion && !relayOn) {
@@ -419,6 +450,17 @@ void applyControlRules(bool motion, float tempC, float hum) {
   // Rule 5: no motion for 10 minutes -> relay off.
   if (!recent10) {
     relayOn = false;
+  }
+
+  // Light rule: auto turn on based on occupancy, auto turn off after 2 hours idle
+  if (recent2h) {
+    if (!lightRelayOn) {
+      setLightRelay(true);
+    }
+  } else {
+    if (lightRelayOn) {
+      setLightRelay(false);
+    }
   }
 
   // Temperature rules. Rule 2 has priority over rule 4 during the 5-10 minute
@@ -448,9 +490,11 @@ void applyControlRules(bool motion, float tempC, float hum) {
     }
   }
 
-  if (relayOn != prevRelay || targetTempC != prevTarget || fanSpeed != prevFan) {
+  if (relayOn != prevRelay || lightRelayOn != prevLight || targetTempC != prevTarget || fanSpeed != prevFan) {
     Serial.print("[Rules] relay=");
     Serial.print(relayOn ? "on" : "off");
+    Serial.print(" light=");
+    Serial.print(lightRelayOn ? "on" : "off");
     Serial.print(" target=");
     Serial.print(targetTempC);
     Serial.print("C fan=");
@@ -459,6 +503,8 @@ void applyControlRules(bool motion, float tempC, float hum) {
     Serial.print(recent5 ? "yes" : "no");
     Serial.print(", recent10=");
     Serial.print(recent10 ? "yes" : "no");
+    Serial.print(", recent2h=");
+    Serial.print(recent2h ? "yes" : "no");
     Serial.println(")");
   }
 }
@@ -476,6 +522,7 @@ void publishTelemetry(bool motion, float tempC, float hum, bool sensorOk,
   doc["timestamp"] = getTimestamp();
   doc["fan_speed"] = fanSpeedToString(fanSpeed);
   doc["relay_on"] = relayOn;
+  doc["light_on"] = lightRelayOn;
   doc["target_temp"] = targetTempC;     // value transmitted via IR
   doc["sensor_ok"] = sensorOk;
   doc["ir_sent"] = irSent;
@@ -499,7 +546,7 @@ void publishTelemetry(bool motion, float tempC, float hum, bool sensorOk,
     doc["ir_code"] = irCode;
   }
 
-  char jsonBuffer[384];
+  char jsonBuffer[512];
   size_t length = serializeJson(doc, jsonBuffer, sizeof(jsonBuffer));
   if (length == 0) {
     Serial.println("[MQTT] Failed to serialize telemetry (buffer too small).");
@@ -566,6 +613,7 @@ void processPendingCommand() {
 
   if (strcmp(action, "override") == 0) {
     bool newRelay = relayOn;
+    bool newLight = lightRelayOn;
     uint8_t newTemp = targetTempC;
     FanSpeed newFan = fanSpeed;
     bool hasStateField = false;
@@ -576,6 +624,16 @@ void processPendingCommand() {
         return;
       }
       newRelay = doc["relay_on"].as<bool>();
+      hasStateField = true;
+    }
+
+    if (!doc["light_on"].isNull() || !doc["light_relay_on"].isNull()) {
+      auto lightVal = !doc["light_on"].isNull() ? doc["light_on"] : doc["light_relay_on"];
+      if (!lightVal.is<bool>()) {
+        publishCommandAck(requestId, false, action, "light_on must be boolean", false, nullptr);
+        return;
+      }
+      newLight = lightVal.as<bool>();
       hasStateField = true;
     }
 
@@ -625,6 +683,7 @@ void processPendingCommand() {
     relayOn = newRelay;
     targetTempC = newTemp;
     fanSpeed = newFan;
+    setLightRelay(newLight);
     beginOverride(durationSeconds * 1000UL, "mqtt");
     sendIrIfNeeded(true);
     publishCommandAck(requestId, true, action, nullptr, false, nullptr);
@@ -775,6 +834,9 @@ void setup() {
   pinMode(PIN_LED, OUTPUT);
   digitalWrite(PIN_LED, LOW);
 
+  pinMode(PIN_LIGHT_RELAY, OUTPUT);
+  setLightRelay(false);
+
   dht.begin();
   irSender.begin();
 
@@ -807,6 +869,12 @@ void loop() {
       lastMotionMs = now;
       motionEverSeen = true;
       motionSinceLastSample = true;
+
+      // Automatically turn on light immediately when occupancy is detected
+      bool warmup = (now - bootMillis) < PIR_WARMUP_MS;
+      if (!warmup && !overrideActive && !lightRelayOn) {
+        setLightRelay(true);
+      }
     }
   }
 
