@@ -1,356 +1,553 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Climate Control Dashboard</title>
-<script src="/static/vendor/chart.umd.min.js"></script>
+<meta name="description" content="Dasbor pemantauan dan kontrol iklim ruangan.">
+<meta name="theme-color" content="#f4f6fa" id="theme-color">
+<title>Auto-Climate Control</title>
 <script>
-  /* Fallback to the CDN when the vendored copy is unavailable (file:// use). */
-  if (typeof Chart === "undefined") {
-    document.write('<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"><\/script>');
-  }
+  /* Apply the saved theme before first paint to avoid a flash. */
+  (function () {
+    var theme = "light";
+    try {
+      var saved = localStorage.getItem("climate.theme");
+      if (saved === "light" || saved === "dark") {
+        theme = saved;
+      } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+        theme = "dark";
+      }
+    } catch (e) {}
+    document.documentElement.dataset.theme = theme;
+    var meta = document.getElementById("theme-color");
+    if (meta) meta.content = theme === "dark" ? "#0b1220" : "#f4f6fa";
+  })();
 </script>
 <style>
-  :root {
-    --bg: #0b1220;
-    --panel: #121b2e;
-    --panel-2: #0e1728;
-    --border: #1f2b45;
-    --text: #e2e8f0;
-    --muted: #8ea0bd;
-    --faint: #5c6f8f;
-    --accent: #22d3ee;
-    --green: #34d399;
-    --red: #f87171;
-    --amber: #fbbf24;
-    --violet: #a78bfa;
-    --blue: #60a5fa;
-    --pink: #f472b6;
+  @font-face {
+    font-family: "Source Sans 3";
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url("/static/fonts/source-sans-3-400.woff2") format("woff2");
   }
+  @font-face {
+    font-family: "Source Sans 3";
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url("/static/fonts/source-sans-3-500.woff2") format("woff2");
+  }
+  @font-face {
+    font-family: "Source Sans 3";
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url("/static/fonts/source-sans-3-600.woff2") format("woff2");
+  }
+  @font-face {
+    font-family: "Source Sans 3";
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url("/static/fonts/source-sans-3-700.woff2") format("woff2");
+  }
+
+  /* ---------- theme tokens ---------- */
+  :root {
+    color-scheme: light;
+    --bg: #f4f6fa;
+    --glow: rgba(14, 116, 144, 0.06);
+    --surface: #ffffff;
+    --surface-2: #eef1f7;
+    --surface-hover: #f8fafd;
+    --border: #dce2ec;
+    --border-strong: #c3cddd;
+    --text: #0f1724;
+    --text-2: #4f5c72;
+    --text-3: #626e80;
+    --accent: #0e7490;
+    --accent-ink: #ffffff;
+    --accent-soft: rgba(14, 116, 144, 0.08);
+    --accent-line: rgba(14, 116, 144, 0.32);
+    --ok: #047857;
+    --ok-soft: rgba(4, 120, 87, 0.13);
+    --warn: #92610a;
+    --warn-soft: rgba(146, 97, 10, 0.13);
+    --danger: #b42318;
+    --danger-soft: rgba(180, 35, 24, 0.07);
+    --danger-line: rgba(180, 35, 24, 0.28);
+    --shadow: 0 1px 2px rgba(15, 23, 36, 0.05);
+    --radius: 10px;
+    --font: "Source Sans 3", "Source Sans Pro", "Segoe UI", Inter, system-ui, -apple-system, sans-serif;
+  }
+  html[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0b1220;
+    --glow: rgba(34, 211, 238, 0.07);
+    --surface: #121b2e;
+    --surface-2: #0e1728;
+    --surface-hover: #16213a;
+    --border: #1f2b45;
+    --border-strong: #2c3d63;
+    --text: #e2e8f0;
+    --text-2: #8ea0bd;
+    --text-3: #7688a5;
+    --accent: #22d3ee;
+    --accent-ink: #06202a;
+    --accent-soft: rgba(34, 211, 238, 0.12);
+    --accent-line: rgba(34, 211, 238, 0.34);
+    --ok: #34d399;
+    --ok-soft: rgba(52, 211, 153, 0.14);
+    --warn: #fbbf24;
+    --warn-soft: rgba(251, 191, 36, 0.14);
+    --danger: #f87171;
+    --danger-soft: rgba(248, 113, 113, 0.1);
+    --danger-line: rgba(248, 113, 113, 0.34);
+    --shadow: none;
+  }
+
   * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; }
+  html, body { margin: 0; }
   body {
+    min-height: 100vh;
     background:
-      radial-gradient(1200px 500px at 80% -10%, rgba(34, 211, 238, .06), transparent 60%),
+      radial-gradient(1000px 420px at 82% -180px, var(--glow), transparent 62%),
       var(--bg);
     color: var(--text);
-    font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+    font-family: var(--font);
     font-size: 14px;
-    min-height: 100vh;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
   }
-  .wrap { max-width: 1280px; margin: 0 auto; padding: 18px 20px 40px; }
+  button { font: inherit; color: inherit; appearance: none; }
+  ::selection { background: var(--accent); color: var(--accent-ink); }
+  .shell { width: min(1184px, calc(100% - 48px)); margin-inline: auto; }
+  .hidden { display: none !important; }
+  :where(button, [tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  /* ---------- header ---------- */
-  header {
-    display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
-    justify-content: space-between; margin-bottom: 14px;
+  /* ---------- navbar ---------- */
+  .navbar { border-bottom: 1px solid var(--border); }
+  .navbar-inner {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    gap: 16px; min-height: 64px; padding-block: 12px;
   }
-  .brand h1 { font-size: 20px; margin: 0; letter-spacing: .3px; }
-  .brand .subtitle { color: var(--muted); font-size: 12px; }
-  .pills { display: flex; flex-wrap: wrap; gap: 8px; }
-  .pill {
-    display: inline-flex; align-items: center; gap: 7px;
-    background: var(--panel); border: 1px solid var(--border);
-    padding: 5px 11px; border-radius: 999px; font-size: 12px; color: var(--muted);
-    white-space: nowrap;
+  .brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+  .mark {
+    flex: none; display: grid; place-items: center;
+    width: 32px; height: 32px; border-radius: 9px;
+    color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-line);
   }
-  .pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
-  .pill.on  { color: var(--text); }
-  .pill.on  .dot { background: var(--green); box-shadow: 0 0 8px rgba(52, 211, 153, .8); }
-  .pill.off .dot { background: var(--red);   box-shadow: 0 0 8px rgba(248, 113, 113, .8); }
-  .pill.time { color: var(--faint); }
+  .brand-text { min-width: 0; }
+  .brand-name { display: block; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.25; }
+  .brand-sub { display: block; font-size: 11.5px; color: var(--text-3); line-height: 1.35; }
+  .nav-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
 
-  .apibar {
-    display: flex; align-items: center; gap: 8px; margin-bottom: 16px;
-    color: var(--faint); font-size: 12px;
+  .status {
+    display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px;
+    border: 1px solid var(--border); border-radius: 999px; background: var(--surface);
+    color: var(--text-2); font-size: 12.5px; font-weight: 500; white-space: nowrap;
   }
-  .apibar input {
-    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
-    border-radius: 8px; padding: 4px 8px; font-size: 12px; width: 260px;
-    font-family: ui-monospace, "JetBrains Mono", Consolas, monospace;
+  .status .dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--text-3); }
+  .status[data-state="ok"] .dot { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+  .status[data-state="off"] { color: var(--danger); border-color: var(--danger-line); }
+  .status[data-state="off"] .dot { background: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft); }
+  .status[data-state="idle"] .dot { animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+  .icon-btn {
+    flex: none; display: grid; place-items: center; width: 32px; height: 32px; padding: 0;
+    border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+    color: var(--text-2); cursor: pointer;
+    transition: color .15s, border-color .15s, background-color .15s;
   }
-  .apibar button {
-    background: var(--panel-2); color: var(--muted); border: 1px solid var(--border);
-    border-radius: 8px; padding: 4px 10px; cursor: pointer; font-size: 12px;
+  .icon-btn:hover { color: var(--text); border-color: var(--border-strong); background: var(--surface-hover); }
+  .icon-sun { display: none; }
+  html[data-theme="dark"] .icon-sun { display: block; }
+  html[data-theme="dark"] .icon-moon { display: none; }
+
+  /* ---------- layout ---------- */
+  main.shell { display: flex; flex-direction: column; gap: 32px; padding-block: 28px 36px; }
+  .section-head {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    gap: 8px 12px; min-height: 26px; margin-bottom: 12px;
   }
-  .apibar button:hover { color: var(--text); border-color: #2c3d63; }
+  h2 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.005em; }
+  .section-meta { font-size: 12.5px; color: var(--text-3); font-variant-numeric: tabular-nums; text-align: right; }
+
+  .chip {
+    display: inline-flex; align-items: center; gap: 7px; height: 26px; padding: 0 10px;
+    border: 1px solid var(--border); border-radius: 999px; background: var(--surface);
+    color: var(--text-3); font-size: 12px; font-weight: 500; white-space: nowrap;
+  }
+  .chip .dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); }
+  .chip[data-state="active"] { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+  .chip[data-state="active"] .dot { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+  .unit-row { display: grid; grid-template-columns: 464fr 672fr; gap: 48px; align-items: stretch; }
+  .photo {
+    margin: 0; overflow: hidden; min-height: 158px;
+    border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2);
+  }
+  .photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  html[data-theme="dark"] .photo img { filter: brightness(0.82) saturate(0.92) contrast(1.02); }
+
+  .cards { display: grid; gap: 12px; }
+  .cards--4 { grid-template-columns: repeat(4, 1fr); }
+  .cards--3 { grid-template-columns: repeat(3, 1fr); }
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
 
   /* ---------- cards ---------- */
-  .cards {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
-    gap: 10px; margin-bottom: 14px;
-  }
   .card {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
-    padding: 12px 14px; min-height: 86px;
+    display: flex; flex-direction: column; gap: 10px;
+    min-height: 158px; padding: 15px 16px; text-align: left;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow);
   }
-  .cl { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .8px; }
-  .cv { font-size: 22px; font-weight: 600; margin-top: 6px; }
-  .cv .cu { font-size: 12px; color: var(--muted); font-weight: 400; margin-left: 3px; }
-  .cs { color: var(--faint); font-size: 11.5px; margin-top: 4px; min-height: 14px; }
-  .good { color: var(--green); }
-  .bad  { color: var(--red); }
-  .warn { color: var(--amber); }
-  .cy   { color: var(--accent); }
+  .label { font-size: 13px; font-weight: 500; line-height: 1.3; color: var(--text-2); }
+  .label-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .card-icon { flex: none; color: var(--text-3); transition: color .15s; }
 
-  /* ---------- charts ---------- */
-  .charts {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-    gap: 10px; margin-bottom: 14px;
+  .readout { flex: 1; display: flex; align-items: center; min-width: 0; }
+  .readout-line {
+    display: inline-flex; align-items: baseline; gap: 5px;
+    max-width: 100%; font-variant-numeric: tabular-nums;
   }
-  .chart-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
-  .chart-card.wide { grid-column: 1 / -1; }
-  .chart-card h2, .panel h2 {
-    font-size: 13px; margin: 0 0 10px; color: var(--muted); font-weight: 600;
-    text-transform: uppercase; letter-spacing: .8px;
-  }
-  .chart-wrap { position: relative; height: 250px; }
-  .chart-card.wide .chart-wrap { height: 270px; }
-  .chart-note { color: var(--faint); font-size: 11px; margin-top: 8px; }
+  .value { font-size: 30px; font-weight: 600; line-height: 1; letter-spacing: -0.02em; }
+  .value.word { font-size: 21px; line-height: 1.1; letter-spacing: -0.01em; }
+  .unit { font-size: 14px; font-weight: 500; color: var(--text-3); }
+  .foot { min-height: 16px; font-size: 11.5px; line-height: 1.3; color: var(--text-3); }
+  .value[data-state="on"] { color: var(--ok); }
+  .value[data-state="off"], .value[data-state="muted"] { color: var(--text-3); }
 
-  /* ---------- lower panels ---------- */
-  .lower { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 10px; }
-  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .cards--control .value { font-size: 26px; }
+  .cards--control .value.word { font-size: 24px; }
 
-  /* control form */
-  .seg { display: flex; gap: 6px; margin-bottom: 14px; }
-  .seg input { position: absolute; opacity: 0; pointer-events: none; }
-  .seg label {
-    flex: 1; text-align: center; padding: 8px 4px; border-radius: 9px;
-    background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
-    cursor: pointer; font-weight: 600; font-size: 13px; user-select: none;
-  }
-  .seg input:checked + label {
-    background: rgba(34, 211, 238, .12); border-color: var(--accent); color: var(--accent);
-  }
-  .grp { margin-bottom: 14px; }
-  .grp.hidden { display: none; }
-  .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
-  .row label { color: var(--muted); font-size: 12.5px; }
-  select, input[type="text"], input[type="number"] {
-    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
-    border-radius: 8px; padding: 6px 9px; font-size: 13px; font-family: inherit;
-  }
-  select:focus, input:focus { outline: none; border-color: #2c3d63; }
-  input[type="range"] { width: 100%; accent-color: var(--accent); }
-  .temp-row { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; margin-bottom: 10px; }
-  .temp-val { font-size: 20px; font-weight: 600; color: var(--amber); width: 64px; text-align: right; }
-  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-  .chip {
-    background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
-    border-radius: 999px; padding: 4px 11px; font-size: 12px; cursor: pointer; user-select: none;
-  }
-  .chip:hover { color: var(--text); }
-  .chip.sel { border-color: var(--accent); color: var(--accent); background: rgba(34, 211, 238, .1); }
-  .hint { color: var(--faint); font-size: 11.5px; margin-top: 6px; }
+  .card--action { cursor: pointer; transition: border-color .15s, background-color .15s; }
+  .card--action:hover { border-color: var(--border-strong); background: var(--surface-hover); }
+  .card--action:hover .card-icon { color: var(--accent); }
+  .card--action:active { background: var(--surface-2); }
 
-  .preview {
-    background: var(--panel-2); border: 1px solid var(--border); border-radius: 9px;
-    padding: 10px; margin-bottom: 12px;
+  /* ---------- stepper ---------- */
+  .stepper {
+    flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 5px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-2);
   }
-  .preview .ph { color: var(--faint); font-size: 10.5px; text-transform: uppercase; letter-spacing: .8px; margin-bottom: 6px; }
-  pre {
-    margin: 0; font-family: ui-monospace, "JetBrains Mono", Consolas, monospace;
-    font-size: 11.5px; color: #b7c5de; white-space: pre-wrap; word-break: break-word;
+  .step {
+    flex: none; display: grid; place-items: center; width: 34px; height: 34px; padding: 0;
+    border: 1px solid var(--border); border-radius: 7px; background: var(--surface);
+    color: var(--text); font-size: 18px; font-weight: 600; line-height: 1;
+    cursor: pointer; transition: background-color .15s, border-color .15s;
   }
-  button.primary {
-    width: 100%; padding: 11px; border: none; border-radius: 9px; cursor: pointer;
-    background: linear-gradient(180deg, #26d6f2, #17b8d6); color: #06222b;
-    font-weight: 700; font-size: 14px; font-family: inherit;
+  .step:hover { border-color: var(--border-strong); background: var(--surface-hover); }
+  .step:active { background: var(--accent-soft); border-color: var(--accent-line); }
+  .stepper-value {
+    flex: 1; display: flex; align-items: baseline; justify-content: center; gap: 4px;
+    font-variant-numeric: tabular-nums;
   }
-  button.primary:hover { filter: brightness(1.07); }
-  button.primary:disabled { opacity: .45; cursor: wait; }
 
-  .result { margin-top: 12px; border-radius: 9px; padding: 11px; font-size: 12.5px; display: none; }
-  .result.show { display: block; }
-  .result.ok   { background: rgba(52, 211, 153, .1);  border: 1px solid rgba(52, 211, 153, .4); }
-  .result.err  { background: rgba(248, 113, 113, .1); border: 1px solid rgba(248, 113, 113, .4); }
-  .result.warn { background: rgba(251, 191, 36, .1); border: 1px solid rgba(251, 191, 36, .4); }
-  .badge {
-    display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px;
-    font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+  /* ---------- actions ---------- */
+  .actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 12px; }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    min-height: 56px; padding: 0 16px; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--surface); color: var(--text);
+    font-size: 15px; font-weight: 600; cursor: pointer;
+    transition: background-color .15s, border-color .15s, color .15s;
   }
-  .badge.ok  { background: rgba(52, 211, 153, .15); color: var(--green); }
-  .badge.err { background: rgba(248, 113, 113, .15); color: var(--red); }
-  .badge.warn{ background: rgba(251, 191, 36, .15); color: var(--amber); }
-  .mono { font-family: ui-monospace, "JetBrains Mono", Consolas, monospace; }
+  .btn:hover:not(:disabled) { border-color: var(--border-strong); background: var(--surface-hover); }
+  .btn:disabled { opacity: 0.55; cursor: progress; }
+  .btn svg { flex: none; }
+  .btn--primary { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
+  .btn--primary:hover:not(:disabled) { border-color: var(--accent); background: var(--accent); filter: brightness(1.08); }
+  .btn--danger { color: var(--danger); }
+  .btn--danger:hover:not(:disabled) { border-color: var(--danger-line); background: var(--danger-soft); }
 
-  .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin-top: 8px; font-size: 12.5px; }
-  .kv div:nth-child(odd) { color: var(--muted); }
-  .kv div:nth-child(even) { color: var(--text); }
+  .feedback { min-height: 19px; margin: 12px 2px 0; font-size: 12.5px; color: var(--text-3); }
+  .feedback[data-kind="ok"] { color: var(--ok); }
+  .feedback[data-kind="warn"] { color: var(--warn); }
+  .feedback[data-kind="err"] { color: var(--danger); }
 
-  /* command log */
-  #cmd-log { list-style: none; margin: 0 0 14px; padding: 0; max-height: 260px; overflow-y: auto; }
-  #cmd-log li {
-    background: var(--panel-2); border: 1px solid var(--border); border-radius: 9px;
-    padding: 8px 10px; margin-bottom: 6px; font-size: 12px;
+  .footer { padding-bottom: 32px; font-size: 11.5px; color: var(--text-3); }
+  .noscript { margin: 12px 0 0; font-size: 12.5px; color: var(--warn); }
+
+  /* ---------- responsive ---------- */
+  @media (max-width: 1000px) {
+    .unit-row { grid-template-columns: 1fr; gap: 12px; }
+    .photo { min-height: 0; aspect-ratio: 464 / 158; }
+    .split { grid-template-columns: 1fr; gap: 24px; }
   }
-  #cmd-log .t { color: var(--faint); font-size: 11px; margin-right: 6px; }
-  #cmd-log .rid { color: var(--faint); font-size: 10.5px; margin-top: 3px; }
-  .empty { color: var(--faint); font-size: 12.5px; padding: 6px 2px; }
-
-  details { margin-top: 8px; }
-  summary { color: var(--muted); font-size: 12px; cursor: pointer; padding: 4px 0; user-select: none; }
-  summary:hover { color: var(--text); }
-  details .preview { margin-top: 6px; max-height: 220px; overflow: auto; }
-
-  footer { color: var(--faint); font-size: 11.5px; margin-top: 22px; text-align: center; }
-  a { color: var(--accent); text-decoration: none; }
+  @media (max-width: 820px) {
+    .cards--4 { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 560px) {
+    .shell { width: calc(100% - 32px); }
+    .brand-sub { display: none; }
+    .status { padding: 0 10px; }
+    .cards--4, .cards--3 { grid-template-columns: 1fr; }
+    .actions { grid-template-columns: 1fr; }
+    .card { min-height: 132px; }
+    .value { font-size: 28px; }
+    main.shell { gap: 28px; padding-block: 22px 28px; }
+    .section-head { margin-bottom: 10px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation: none !important;
+      transition: none !important;
+      scroll-behavior: auto !important;
+    }
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
 
-  <header>
+<header class="navbar">
+  <div class="shell navbar-inner">
     <div class="brand">
-      <h1>🌡️ Climate Control</h1>
-      <div class="subtitle">IoT Auto Climate Control — transmit / receive node dashboard</div>
+      <span class="mark" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10 13.4V5.5a2 2 0 0 1 4 0v7.9a4.5 4.5 0 1 1-4 0Z"/>
+          <path d="M12 9.5v5.5"/>
+        </svg>
+      </span>
+      <span class="brand-text">
+        <span class="brand-name">Auto-Climate Control</span>
+        <span class="brand-sub">Kontrol iklim ruangan</span>
+      </span>
     </div>
-    <div class="pills">
-      <span class="pill" id="pill-api"><span class="dot"></span>API</span>
-      <span class="pill" id="pill-mqtt"><span class="dot"></span>MQTT</span>
-      <span class="pill" id="pill-tx"><span class="dot"></span>Transmitter</span>
-      <span class="pill" id="pill-rx"><span class="dot"></span>Receiver</span>
-      <span class="pill time" id="pill-updated">—</span>
+    <div class="nav-actions">
+      <span class="status" id="status" data-state="idle" role="status">
+        <span class="dot" aria-hidden="true"></span>
+        <span id="status-text">Menghubungkan…</span>
+      </span>
+      <button class="icon-btn" id="theme-toggle" type="button" aria-label="Ganti ke tema gelap">
+        <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4"/>
+          <path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4"/>
+        </svg>
+        <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/>
+        </svg>
+      </button>
     </div>
-  </header>
+  </div>
+</header>
 
-  <div class="apibar">
-    <span>Consumer API:</span>
-    <input id="api-base" spellcheck="false" placeholder="http://localhost:8002">
-    <button id="api-save">Apply</button>
-    <span id="api-msg"></span>
+<main class="shell">
+
+  <!-- ================= unit A/C & lampu ================= -->
+  <section>
+    <div class="section-head">
+      <h2>Unit A/C dan lampu</h2>
+    </div>
+    <div class="unit-row">
+      <figure class="photo">
+        <img src="/static/ac-photo.png" alt="Unit pendingin ruangan" decoding="async" onerror="this.remove()">
+      </figure>
+      <div class="cards cards--4">
+        <article class="card">
+          <span class="label">Temperatur</span>
+          <div class="readout">
+            <span class="readout-line">
+              <span class="value" id="ac-temp">—</span>
+              <span class="unit hidden" id="ac-temp-unit">°C</span>
+            </span>
+          </div>
+          <span class="foot">Suhu ruangan</span>
+        </article>
+        <article class="card">
+          <span class="label">Kecepatan kipas</span>
+          <div class="readout">
+            <span class="readout-line">
+              <span class="value word" id="ac-fan">—</span>
+            </span>
+          </div>
+          <span class="foot" aria-hidden="true"></span>
+        </article>
+        <article class="card">
+          <span class="label">A/C</span>
+          <div class="readout">
+            <span class="readout-line">
+              <span class="value word" id="ac-relay">—</span>
+            </span>
+          </div>
+          <span class="foot" aria-hidden="true"></span>
+        </article>
+        <article class="card">
+          <span class="label">Lampu</span>
+          <div class="readout">
+            <span class="readout-line">
+              <span class="value word" id="ac-lamp">—</span>
+            </span>
+          </div>
+          <span class="foot">Belum tersedia</span>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= data sensor & cuaca ================= -->
+  <div class="split">
+    <section>
+      <div class="section-head">
+        <h2>Data sensor</h2>
+        <span class="section-meta" id="sensor-updated">Menunggu data</span>
+      </div>
+      <div class="cards cards--3">
+        <article class="card">
+          <span class="label">Temperatur ruangan</span>
+          <div class="readout">
+            <span class="readout-line">
+              <span class="value" id="ds-temp">—</span>
+              <span class="unit hidden" id="ds-temp-unit">°C</span>
+            </span>
+          </div>
+        </article>
+        <article class="card">
+          <span class="label">Kelembapan ruangan</span>
+          <div class="readout">
+            <span class="readout-line">
+              <span class="value" id="ds-hum">—</span>
+              <span class="unit hidden" id="ds-hum-unit">%</span>
+            </span>
+          </div>
+        </article>
+        <article class="card">
+          <span class="label">Ruangan dihuni</span>
+          <div class="readout">
+            <span class="readout-line">
+              <span class="value word" id="ds-motion">—</span>
+            </span>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>Cuaca Surakarta</h2>
+        <span class="section-meta" id="weather-desc">—</span>
+      </div>
+      <div class="cards cards--3">
+        <article class="card">
+          <span class="label">Temperatur luar</span>
+          <div class="readout">
+            <span class="readout-line">
+              <span class="value" id="wx-temp">—</span>
+              <span class="unit hidden" id="wx-temp-unit">°C</span>
+            </span>
+          </div>
+        </article>
+        <article class="card">
+          <span class="label">Kelembapan luar</span>
+          <div class="readout">
+            <span class="readout-line">
+              <span class="value" id="wx-hum">—</span>
+              <span class="unit hidden" id="wx-hum-unit">%</span>
+            </span>
+          </div>
+        </article>
+        <article class="card">
+          <span class="label">Hujan</span>
+          <div class="readout">
+            <span class="readout-line">
+              <span class="value word" id="wx-rain">—</span>
+            </span>
+          </div>
+        </article>
+      </div>
+    </section>
   </div>
 
-  <!-- ================= live state cards ================= -->
-  <section class="cards">
-    <div class="card"><div class="cl">Room temp</div><div class="cv"><span id="v-temp">—</span><span class="cu">°C</span></div><div class="cs" id="s-temp">waiting for data…</div></div>
-    <div class="card"><div class="cl">AC setpoint</div><div class="cv"><span id="v-target">—</span><span class="cu">°C</span></div><div class="cs" id="s-target">encoded into IR frame</div></div>
-    <div class="card"><div class="cl">AC decoded (receiver)</div><div class="cv"><span id="v-rxtemp">—</span><span class="cu">°C</span></div><div class="cs" id="s-rxtemp">—</div></div>
-    <div class="card"><div class="cl">Humidity</div><div class="cv"><span id="v-hum">—</span><span class="cu">%</span></div><div class="cs" id="s-hum">—</div></div>
-    <div class="card"><div class="cl">Fan speed</div><div class="cv" id="v-fan">—</div><div class="cs" id="s-fan">—</div></div>
-    <div class="card"><div class="cl">Relay / AC power</div><div class="cv" id="v-relay">—</div><div class="cs" id="s-relay">—</div></div>
-    <div class="card"><div class="cl">Motion</div><div class="cv" id="v-motion">—</div><div class="cs" id="s-motion">—</div></div>
-    <div class="card"><div class="cl">Sensor</div><div class="cv" id="v-sensor">—</div><div class="cs" id="s-sensor">DHT11</div></div>
-    <div class="card"><div class="cl">Override</div><div class="cv" id="v-override">—</div><div class="cs" id="s-override">—</div></div>
-    <div class="card"><div class="cl">Last IR frame</div><div class="cv mono" id="v-ir" style="font-size:15px">—</div><div class="cs" id="s-ir">—</div></div>
-    <div class="card"><div class="cl">Transmitter uptime</div><div class="cv" id="v-uptime" style="font-size:17px">—</div><div class="cs" id="s-uptime">—</div></div>
-    <div class="card"><div class="cl">Outside weather</div><div class="cv"><span id="v-weather">—</span><span class="cu" id="u-weather"></span></div><div class="cs" id="s-weather">—</div></div>
+  <!-- ================= kontrol override ================= -->
+  <section>
+    <div class="section-head">
+      <h2>Kontrol override manual</h2>
+      <span class="chip" id="override-chip" data-state="idle">
+        <span class="dot" aria-hidden="true"></span>
+        <span id="override-label">Kontrol otomatis</span>
+      </span>
+    </div>
+
+    <div class="cards cards--4 cards--control">
+      <div class="card" id="ctl-temp-card" role="group" aria-labelledby="ctl-temp-label">
+        <span class="label" id="ctl-temp-label">Suhu target</span>
+        <div class="readout">
+          <div class="stepper">
+            <button class="step" id="ctl-temp-down" type="button" aria-label="Turunkan suhu target">−</button>
+            <span class="stepper-value">
+              <span class="value" id="ctl-temp">24</span>
+              <span class="unit">°C</span>
+            </span>
+            <button class="step" id="ctl-temp-up" type="button" aria-label="Naikkan suhu target">+</button>
+          </div>
+        </div>
+        <span class="foot">Rentang 16–30 °C</span>
+      </div>
+
+      <button class="card card--action" id="ctl-fan" type="button" aria-describedby="ctl-fan-foot">
+        <span class="label-row">
+          <span class="label">Kecepatan kipas</span>
+          <svg class="card-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"/>
+          </svg>
+        </span>
+        <span class="readout">
+          <span class="readout-line">
+            <span class="value word" id="ctl-fan-value">Sedang</span>
+          </span>
+        </span>
+        <span class="foot" id="ctl-fan-foot">Ketuk untuk ubah</span>
+      </button>
+
+      <button class="card card--action" id="ctl-ac" type="button" aria-describedby="ctl-ac-foot">
+        <span class="label-row">
+          <span class="label">A/C</span>
+          <svg class="card-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"/>
+          </svg>
+        </span>
+        <span class="readout">
+          <span class="readout-line">
+            <span class="value word" id="ctl-ac-value">Nyala</span>
+          </span>
+        </span>
+        <span class="foot" id="ctl-ac-foot">Ketuk untuk ubah</span>
+      </button>
+
+      <article class="card">
+        <span class="label">Lampu</span>
+        <div class="readout">
+          <span class="readout-line">
+            <span class="value word" id="ctl-lamp">—</span>
+          </span>
+        </div>
+        <span class="foot">Belum tersedia</span>
+      </article>
+    </div>
+
+    <div class="actions" id="actions">
+      <button class="btn btn--primary" id="btn-apply" type="button">Terapkan</button>
+      <button class="btn" id="btn-duration" type="button" aria-label="Durasi override: 5 detik. Ketuk untuk mengubah.">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9"/>
+          <path d="M12 7v5l3 2"/>
+        </svg>
+        <span id="btn-duration-label">5 detik</span>
+      </button>
+      <button class="btn btn--danger" id="btn-release" type="button">Lepas</button>
+    </div>
+
+    <p class="feedback" id="feedback" role="status" aria-live="polite"></p>
   </section>
 
-  <!-- ================= charts ================= -->
-  <section class="charts">
-    <div class="chart-card wide">
-      <h2>Temperature — room vs setpoint</h2>
-      <div class="chart-wrap"><canvas id="chart-temp"></canvas></div>
-      <div class="chart-note">Room temperature from the DHT11, the setpoint encoded into the IR frame, and the setpoint decoded by the receiver (last 100 samples each).</div>
-    </div>
-    <div class="chart-card">
-      <h2>Humidity</h2>
-      <div class="chart-wrap"><canvas id="chart-hum"></canvas></div>
-    </div>
-    <div class="chart-card">
-      <h2>Device state</h2>
-      <div class="chart-wrap"><canvas id="chart-state"></canvas></div>
-    </div>
-  </section>
+</main>
 
-  <!-- ================= control + ack ================= -->
-  <section class="lower">
-
-    <div class="panel">
-      <h2>🎛️ Control — manual override</h2>
-      <div class="seg">
-        <input type="radio" name="mode" id="mode-override" value="override" checked><label for="mode-override">Override</label>
-        <input type="radio" name="mode" id="mode-release" value="release"><label for="mode-release">Release</label>
-        <input type="radio" name="mode" id="mode-raw" value="raw"><label for="mode-raw">Raw IR</label>
-      </div>
-
-      <div id="grp-override" class="grp">
-        <div class="row">
-          <label for="ctl-relay">AC relay</label>
-          <select id="ctl-relay">
-            <option value="keep">keep current</option>
-            <option value="on">on</option>
-            <option value="off">off</option>
-          </select>
-        </div>
-        <div class="temp-row">
-          <label for="ctl-temp"><input type="checkbox" id="ctl-temp-enable" style="accent-color:var(--accent)"> Setpoint</label>
-          <input type="range" id="ctl-temp" min="16" max="30" step="1" value="24" disabled>
-          <div class="temp-val" id="ctl-temp-val">24 °C</div>
-        </div>
-        <div class="row">
-          <label for="ctl-fan">Fan speed</label>
-          <select id="ctl-fan">
-            <option value="keep">keep current</option>
-            <option value="off">off</option>
-            <option value="low">low</option>
-            <option value="medium">medium</option>
-            <option value="high">high</option>
-          </select>
-        </div>
-        <div class="hint">Omitted fields keep their current value. The fan is forced off when the relay is off.</div>
-      </div>
-
-      <div id="grp-raw" class="grp hidden">
-        <div class="row">
-          <label for="ctl-raw">NEC frame</label>
-          <input type="text" id="ctl-raw" class="mono" placeholder="0xA1DF15EA" spellcheck="false" style="width:170px">
-        </div>
-        <div class="hint">32-bit hex frame. Valid AC frames become an override (source <span class="mono">mqtt-raw</span>); anything else is transmitted once for testing other NEC devices.</div>
-      </div>
-
-      <div id="grp-release" class="grp hidden">
-        <div class="hint">Clears any active override immediately and resumes the automatic control rules.</div>
-      </div>
-
-      <div id="grp-duration" class="grp">
-        <div class="row"><label>Duration</label><span class="hint" style="margin:0">0 = until released</span></div>
-        <div class="chips" id="dur-chips">
-          <span class="chip" data-d="60">1 min</span>
-          <span class="chip" data-d="300">5 min</span>
-          <span class="chip" data-d="1800">30 min</span>
-          <span class="chip" data-d="3600">1 h</span>
-          <span class="chip sel" data-d="86400">24 h</span>
-          <span class="chip" data-d="0">until release</span>
-        </div>
-        <div class="row" style="margin-top:9px">
-          <label for="ctl-duration">Custom (seconds)</label>
-          <input type="number" id="ctl-duration" min="0" max="86400" step="1" value="60" style="width:90px">
-        </div>
-      </div>
-
-      <div class="preview">
-        <div class="ph">Payload preview (published to <span class="mono">transmit/command</span>)</div>
-        <pre id="payload-preview">{}</pre>
-      </div>
-
-      <button class="primary" id="send">Send command</button>
-      <div id="send-result" class="result"></div>
-    </div>
-
-    <div class="panel">
-      <h2>📟 Latest command ACK</h2>
-      <div id="ack-panel" class="empty">No command ACK received yet.</div>
-
-      <h2 style="margin-top:18px">🧾 Command log</h2>
-      <ul id="cmd-log"><li class="empty" style="border:none;background:none;padding:0">No commands sent from this dashboard yet.</li></ul>
-
-      <h2 style="margin-top:18px">📦 Raw payloads</h2>
-      <details><summary>Latest transmit/data</summary><div class="preview"><pre id="raw-tx">—</pre></div></details>
-      <details><summary>Latest receive/state</summary><div class="preview"><pre id="raw-rx">—</pre></div></details>
-      <details><summary>Latest api/weather</summary><div class="preview"><pre id="raw-weather">—</pre></div></details>
-    </div>
-
-  </section>
-
-  <footer>
-    Data flows over MQTT → consumer ring buffers (100 samples) → this page polls the REST API every 3 s.
-    Commands take the same path as <span class="mono">tools/ir_override.py</span>.
-  </footer>
-</div>
+<footer class="shell footer">
+  Pembaruan otomatis setiap 3 detik. Cuaca dari OpenWeatherMap.
+  <noscript><p class="noscript">Aktifkan JavaScript untuk melihat data langsung dan mengirim perintah.</p></noscript>
+</footer>
 
 <script>
 "use strict";
@@ -358,31 +555,72 @@
 /* ============================================================
    Configuration
    ============================================================ */
-const DEFAULT_API =
-  location.protocol.startsWith("http")
-    ? location.origin
-    : "http://localhost:8002";
-let API = localStorage.getItem("climate.apiBase") || DEFAULT_API;
+const API = location.protocol.startsWith("http") ? location.origin : "http://localhost:8002";
+const POLL_MS = 3000;
+const THEME_KEY = "climate.theme";
 
-const FAN_NAMES = ["off", "low", "medium", "high"];
-const FAN_INDEX = { off: 0, low: 1, medium: 2, high: 3 };
+const FANS = ["off", "low", "medium", "high"];
+const FAN_LABEL = { off: "Mati", low: "Rendah", medium: "Sedang", high: "Tinggi" };
 
-const $ = (sel) => document.querySelector(sel);
-const S = {
-  tx: null, rx: null, txStatus: null, rxStatus: null,
-  weather: null, ack: null, health: null, apiOnline: true,
+/* Duration presets, cycled by the duration button. 0 = until released. */
+const DURATIONS = [5, 30, 60, 300, 0];
+const DURATION_LABEL = { 5: "5 detik", 30: "30 detik", 60: "1 menit", 300: "5 menit", 0: "Sampai dilepas" };
+
+/* OpenWeatherMap "main" values, so the meta line stays in Indonesian. */
+const WEATHER_ID = {
+  clear: "Cerah", clouds: "Berawan", rain: "Hujan", drizzle: "Gerimis",
+  thunderstorm: "Badai", snow: "Salju", mist: "Berkabut", fog: "Berkabut",
+  haze: "Berkabut", smoke: "Berasap", dust: "Berdebu", sand: "Berdebu",
+  ash: "Abu vulkanik", squall: "Angin kencang", tornado: "Angin puting beliung",
 };
 
+const $ = (sel) => document.querySelector(sel);
+
+const S = { tx: null, weather: null, health: null, online: false, loaded: false };
+const C = { temp: 24, fan: "medium", ac: true, duration: 5, dirty: false, busy: false };
+
 /* ============================================================
-   Small helpers
+   Theme
    ============================================================ */
-function setPill(el, state, text) {
-  el.classList.remove("on", "off");
-  if (state === true) el.classList.add("on");
-  if (state === false) el.classList.add("off");
-  if (text !== undefined) el.childNodes[el.childNodes.length - 1].textContent = " " + text;
+function currentTheme() {
+  return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
 }
 
+function applyTheme(theme) {
+  const dark = theme === "dark";
+  document.documentElement.dataset.theme = theme;
+
+  const toggle = $("#theme-toggle");
+  const description = dark ? "Ganti ke tema terang" : "Ganti ke tema gelap";
+  toggle.setAttribute("aria-label", description);
+  toggle.title = description;
+
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.content = dark ? "#0b1220" : "#f4f6fa";
+}
+
+applyTheme(currentTheme());
+
+$("#theme-toggle").addEventListener("click", () => {
+  const next = currentTheme() === "dark" ? "light" : "dark";
+  applyTheme(next);
+  try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+});
+
+/* Follow the OS only while the user has not picked a theme. */
+if (window.matchMedia) {
+  const scheme = window.matchMedia("(prefers-color-scheme: dark)");
+  const followSystem = (event) => {
+    let saved = null;
+    try { saved = localStorage.getItem(THEME_KEY); } catch (e) {}
+    if (!saved) applyTheme(event.matches ? "dark" : "light");
+  };
+  if (scheme.addEventListener) scheme.addEventListener("change", followSystem);
+}
+
+/* ============================================================
+   Helpers
+   ============================================================ */
 async function jget(path) {
   try {
     const r = await fetch(API + path, { headers: { Accept: "application/json" } });
@@ -394,512 +632,281 @@ async function jget(path) {
   }
 }
 
+function fmtNum(v, digits = 1) {
+  if (!Number.isFinite(v)) return null;
+  return v.toFixed(digits).replace(/\.0+$/, "");
+}
+
 function fmtTime(epochSec) {
-  if (!epochSec || epochSec <= 0) return "—";
+  if (!Number.isFinite(epochSec) || epochSec <= 0) return null;
   return new Date(epochSec * 1000).toLocaleTimeString([], { hour12: false });
 }
 
-function fmtUptime(ms) {
-  if (!Number.isFinite(ms) || ms < 0) return "—";
-  const s = Math.floor(ms / 1000);
-  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600);
-  const m = Math.floor((s % 3600) / 60), sec = s % 60;
-  return [d && d + "d", h + "h", m + "m", sec + "s"].filter(Boolean).join(" ");
+function fmtDur(seconds) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return null;
+  const s = Math.round(seconds);
+  if (s >= 3600) return Math.ceil(s / 3600) + " jam";
+  if (s >= 60) return Math.ceil(s / 60) + " menit";
+  return s + " detik";
 }
 
-function fmtDur(s) {
-  if (!Number.isFinite(s)) return "—";
-  if (s === 0) return "until release";
-  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
-  return [h && h + "h", m && m + "m", sec && sec + "s"].filter(Boolean).join(" ") || s + "s";
+function setValue(idValue, idUnit, text, showUnit) {
+  $(idValue).textContent = text;
+  const unit = idUnit ? $(idUnit) : null;
+  if (unit) unit.classList.toggle("hidden", !showUnit);
 }
 
-function setCard(idVal, idSub, value, sub, cls) {
-  const v = $("#" + idVal), s = $("#" + idSub);
-  if (v) { v.textContent = value; v.className = v.classList.contains("mono") ? "mono " + (cls || "") : (cls || ""); }
-  if (s && sub !== undefined) s.textContent = sub;
-}
-
-/* ============================================================
-   Charts
-   ============================================================ */
-Chart.defaults.color = "#8ea0bd";
-Chart.defaults.borderColor = "rgba(148,163,184,.08)";
-Chart.defaults.font.family = "'Inter','Segoe UI',system-ui,sans-serif";
-Chart.defaults.font.size = 11;
-
-const baseOpts = (yTitle) => ({
-  animation: false,
-  maintainAspectRatio: false,
-  interaction: { mode: "nearest", intersect: false },
-  plugins: {
-    legend: { labels: { boxWidth: 10, boxHeight: 2 } },
-    tooltip: { callbacks: { title: (items) => fmtTime(items[0].parsed.x) } },
-  },
-  scales: {
-    x: {
-      type: "linear",
-      ticks: { maxTicksLimit: 9, callback: (v) => fmtTime(v) },
-      grid: { color: "rgba(148,163,184,.05)" },
-    },
-    y: { title: { display: !!yTitle, text: yTitle }, grid: { color: "rgba(148,163,184,.05)" } },
-  },
-});
-
-const tempChart = new Chart($("#chart-temp"), {
-  type: "line",
-  data: {
-    datasets: [
-      { label: "Room temp", data: [], borderColor: "#22d3ee", backgroundColor: "rgba(34,211,238,.07)", fill: true, pointRadius: 0, borderWidth: 2, tension: .25 },
-      { label: "Setpoint (IR)", data: [], borderColor: "#f59e0b", borderDash: [6, 4], pointRadius: 0, borderWidth: 2, stepped: true },
-      { label: "AC decoded (rx)", data: [], borderColor: "#a78bfa", pointRadius: 0, borderWidth: 2, stepped: true },
-    ],
-  },
-  options: (() => {
-    const o = baseOpts("°C");
-    o.scales.y.suggestedMin = 14; o.scales.y.suggestedMax = 32;
-    o.plugins.tooltip.callbacks.label = (c) => ` ${c.dataset.label}: ${c.parsed.y.toFixed(1)} °C`;
-    return o;
-  })(),
-});
-
-const humChart = new Chart($("#chart-hum"), {
-  type: "line",
-  data: {
-    datasets: [
-      { label: "Humidity", data: [], borderColor: "#4ade80", backgroundColor: "rgba(74,222,128,.07)", fill: true, pointRadius: 0, borderWidth: 2, tension: .25 },
-    ],
-  },
-  options: (() => {
-    const o = baseOpts("%");
-    o.scales.y.suggestedMin = 0; o.scales.y.suggestedMax = 100;
-    o.plugins.tooltip.callbacks.label = (c) => ` Humidity: ${c.parsed.y.toFixed(1)} %`;
-    return o;
-  })(),
-});
-
-const stateChart = new Chart($("#chart-state"), {
-  type: "line",
-  data: {
-    datasets: [
-      { label: "Relay", data: [], borderColor: "#34d399", pointRadius: 0, borderWidth: 1.6, stepped: true, yAxisID: "yBin" },
-      { label: "Motion", data: [], borderColor: "#f472b6", pointRadius: 0, borderWidth: 1.6, stepped: true, yAxisID: "yBin" },
-      { label: "Override", data: [], borderColor: "#fbbf24", pointRadius: 0, borderWidth: 1.6, stepped: true, yAxisID: "yBin" },
-      { label: "AC power (rx)", data: [], borderColor: "#a78bfa", pointRadius: 0, borderWidth: 1.6, stepped: true, yAxisID: "yBin" },
-      { label: "Fan", data: [], borderColor: "#60a5fa", pointRadius: 0, borderWidth: 1.6, stepped: true, yAxisID: "yFan" },
-    ],
-  },
-  options: {
-    animation: false,
-    maintainAspectRatio: false,
-    interaction: { mode: "nearest", intersect: false },
-    plugins: {
-      legend: { labels: { boxWidth: 10, boxHeight: 2 } },
-      tooltip: {
-        callbacks: {
-          title: (items) => fmtTime(items[0].parsed.x),
-          label: (c) => c.dataset.label === "Fan"
-            ? ` Fan: ${FAN_NAMES[c.parsed.y] ?? c.parsed.y}`
-            : ` ${c.dataset.label}: ${c.parsed.y ? "on" : "off"}`,
-        },
-      },
-    },
-    scales: {
-      x: {
-        type: "linear",
-        ticks: { maxTicksLimit: 9, callback: (v) => fmtTime(v) },
-        grid: { color: "rgba(148,163,184,.05)" },
-      },
-      yBin: {
-        min: -0.25, max: 1.55, position: "left",
-        ticks: { stepSize: 1, callback: (v) => (v === 0 ? "off" : v === 1 ? "on" : "") },
-        grid: { color: "rgba(148,163,184,.05)" },
-      },
-      yFan: {
-        min: -0.25, max: 3.7, position: "right",
-        ticks: { stepSize: 1, callback: (v) => FAN_NAMES[v] ?? "" },
-        grid: { drawOnChartArea: false },
-      },
-    },
-  },
-});
-
-/* Build {x,y} points from a FIFO history list. timestamp=0 (NTP not yet
-   synchronised) is replaced by a stable synthetic timeline. */
-function makeSampler(list, interval = 5) {
-  const base = Math.floor(Date.now() / 1000) - list.length * interval;
-  return (pick) => {
-    let prev = base;
-    return list
-      .map((d) => {
-        const ts = Number.isFinite(d.timestamp) && d.timestamp > 0 ? d.timestamp : (prev += interval);
-        const y = pick(d);
-        return y == null || Number.isNaN(y) ? null : { x: ts, y };
-      })
-      .filter((p) => p);
-  };
-}
-
-function refreshCharts(txHist, rxHist) {
-  const sTx = makeSampler(txHist), sRx = makeSampler(rxHist, 60);
-  tempChart.data.datasets[0].data = sTx((d) => d.temp);
-  tempChart.data.datasets[1].data = sTx((d) => d.target_temp);
-  tempChart.data.datasets[2].data = sRx((d) => d.temp);
-  humChart.data.datasets[0].data = sTx((d) => d.hum);
-  stateChart.data.datasets[0].data = sTx((d) => (d.relay_on === true ? 1 : d.relay_on === false ? 0 : null));
-  stateChart.data.datasets[1].data = sTx((d) => (d.motion === true ? 1 : d.motion === false ? 0 : null));
-  stateChart.data.datasets[2].data = sTx((d) => (d.override === true ? 1 : d.override === false ? 0 : null));
-  stateChart.data.datasets[3].data = sRx((d) => (d.ac_power_state === true ? 1 : d.ac_power_state === false ? 0 : null));
-  stateChart.data.datasets[4].data = sTx((d) => (d.fan_speed in FAN_INDEX ? FAN_INDEX[d.fan_speed] : null));
-  tempChart.update(); humChart.update(); stateChart.update();
+function setWord(id, text, state) {
+  const el = $(id);
+  el.textContent = text;
+  if (state) el.dataset.state = state;
+  else delete el.dataset.state;
 }
 
 /* ============================================================
-   Live state rendering
+   Control state
    ============================================================ */
-function renderPills() {
-  setPill($("#pill-api"), S.apiOnline, S.apiOnline ? "API" : "API unreachable");
-  setPill($("#pill-mqtt"), S.health ? !!S.health.mqtt : false, S.health ? (S.health.mqtt ? "MQTT" : "MQTT down") : "MQTT ?");
-  setPill($("#pill-tx"), S.txStatus ? !!S.txStatus.online : null, S.txStatus ? (S.txStatus.online ? "Transmitter" : "Transmitter offline") : "Transmitter ?");
-  setPill($("#pill-rx"), S.rxStatus ? !!S.rxStatus.online : null, S.rxStatus ? (S.rxStatus.online ? "Receiver" : "Receiver offline") : "Receiver ?");
-  $("#pill-updated").textContent = new Date().toLocaleTimeString([], { hour12: false });
+function syncControls() {
+  const tx = S.tx;
+  if (!tx || C.dirty) return;
+  if (Number.isFinite(tx.target_temp)) C.temp = tx.target_temp;
+  if (FANS.includes(tx.fan_speed)) C.fan = tx.fan_speed;
+  if (typeof tx.relay_on === "boolean") C.ac = tx.relay_on;
 }
 
-function renderCards() {
-  const tx = S.tx, rx = S.rx;
+function renderControls() {
+  $("#ctl-temp").textContent = String(C.temp);
+  setWord("#ctl-fan-value", FAN_LABEL[C.fan] || "—", C.fan === "off" ? "off" : "");
+  setWord("#ctl-ac-value", C.ac ? "Nyala" : "Mati", C.ac ? "on" : "off");
 
-  // Transmitter telemetry
-  if (tx) {
-    setCard("v-temp", "s-temp", Number.isFinite(tx.temp) ? tx.temp.toFixed(1) : "—",
-      tx.timestamp > 0 ? "sampled " + fmtTime(tx.timestamp) : "NTP not synced");
-    setCard("v-target", "s-target", String(tx.target_temp), "encoded into IR frame", "warn");
-    setCard("v-hum", "s-hum", Number.isFinite(tx.hum) ? tx.hum.toFixed(1) : "—",
-      tx.hum > 50 ? "fan high per rules" : "fan off per rules");
-    setCard("v-fan", "s-fan", tx.fan_speed || "—",
-      tx.relay_on ? "AC running" : "fan forced off (relay off)");
-    setCard("v-relay", "s-relay", tx.relay_on ? "ON" : "OFF", tx.relay_on ? "AC powered" : "AC cut off",
-      tx.relay_on ? "good" : "bad");
-    setCard("v-motion", "s-motion", tx.motion ? "detected" : "idle",
-      tx.warmup ? "PIR warming up" : (tx.motion ? "someone in the room" : "no motion"));
-    setCard("v-sensor", "s-sensor", tx.sensor_ok ? "OK" : "FAIL",
-      tx.sensor_ok ? "DHT11 reading valid" : "reusing last good reading",
-      tx.sensor_ok ? "good" : "bad");
-    setCard("v-ir", "s-ir", tx.ir_code || "—", tx.ir_sent ? "transmitted" : "not sent this sample", "cy");
-    setCard("v-uptime", "s-uptime", fmtUptime(tx.uptime_ms),
-      tx.timestamp > 0 ? "clock " + fmtTime(tx.timestamp) : "");
-
-    const ov = $("#v-override"), ovs = $("#s-override");
-    if (tx.override) {
-      ov.textContent = "ACTIVE"; ov.className = "warn";
-      const src = tx.override_source ? "source " + tx.override_source : "manual";
-      ovs.textContent = tx.override_indefinite
-        ? src + " · until released"
-        : src + " · " + fmtDur(tx.override_remaining_s ?? 0) + " left";
-    } else {
-      ov.textContent = "none"; ov.className = "";
-      ovs.textContent = "automatic rules in control";
-    }
-  }
-
-  // Receiver state
-  if (rx) {
-    setCard("v-rxtemp", "s-rxtemp", Number.isFinite(rx.temp) ? rx.temp.toFixed(1) : "—",
-      (rx.state_valid ? "IR frame valid" : "no valid frame yet") + (rx.source ? " · " + rx.source : ""));
-  }
-
-  // Weather (api/weather — schema not fixed, best-effort OpenWeatherMap parsing)
-  const w = S.weather;
-  const wv = $("#v-weather"), wu = $("#u-weather"), ws = $("#s-weather");
-  if (w) {
-    let t = w.main && Number.isFinite(w.main.temp) ? w.main.temp : null;
-    if (t != null && t > 120) t = t - 273.15; // Kelvin → Celsius
-    const desc = w.weather && w.weather[0] && w.weather[0].description;
-    wv.textContent = t != null ? t.toFixed(1) : "—";
-    wu.textContent = t != null ? "°C" : "";
-    ws.textContent = [desc, w.name, w.main && Number.isFinite(w.main.humidity) ? w.main.humidity + "% RH" : null]
-      .filter(Boolean).join(" · ") || "unrecognised payload — see raw JSON";
-  }
-
-  // Raw payload viewers
-  if (tx) $("#raw-tx").textContent = JSON.stringify(tx, null, 2);
-  if (rx) $("#raw-rx").textContent = JSON.stringify(rx, null, 2);
-  if (S.weather) $("#raw-weather").textContent = JSON.stringify(S.weather, null, 2);
+  const label = DURATION_LABEL[C.duration] ?? C.duration + " detik";
+  $("#btn-duration-label").textContent = label;
+  $("#btn-duration").setAttribute("aria-label", "Durasi override: " + label + ". Ketuk untuk mengubah.");
 }
 
 /* ============================================================
-   ACK rendering
+   Live rendering
    ============================================================ */
-function ackHtml(ack, sent) {
-  if (!ack) {
-    return `<span class="badge warn">timeout</span>
-      <div class="kv" style="margin-top:8px">
-        <div>Result</div><div>No ACK from the transmitter — it may be offline. The command was still published.</div>
-      </div>`;
+function renderStatus() {
+  const pill = $("#status");
+  const text = $("#status-text");
+
+  let state = "idle";
+  let label = "Menghubungkan…";
+  if (S.loaded && !S.online) {
+    state = "off";
+    label = "API tidak terjangkau";
+  } else if (S.loaded && S.health && S.health.mqtt === false) {
+    state = "off";
+    label = "MQTT terputus";
+  } else if (S.loaded && S.tx) {
+    state = "ok";
+    label = "Terhubung";
+  } else if (S.loaded) {
+    label = "Menunggu data";
   }
-  const rows = [];
-  rows.push(["Action", ack.action ?? "—"]);
-  if (ack.request_id) rows.push(["Request", `<span class="mono">${ack.request_id}</span>`]);
-  if (ack.override_source) rows.push(["Source", ack.override_source]);
-  if (ack.override) {
-    rows.push(["Override remaining",
-      ack.override_indefinite ? "until released" : fmtDur(ack.override_remaining_s ?? 0)]);
-  }
-  if (ack.applied) {
-    rows.push(["Applied",
-      `relay ${ack.applied.relay_on ? "on" : "off"}, ${ack.applied.target_temp} °C, fan ${ack.applied.fan_speed}`]);
-  }
-  if (ack.ir_code) rows.push(["IR frame", `<span class="mono">${ack.ir_code}</span>`]);
-  if (ack.raw_only) rows.push(["Raw only", "yes — sent as one-shot, rules not suspended"]);
-  if (ack.timestamp) rows.push(["At", fmtTime(ack.timestamp)]);
-  if (ack.error) rows.push(["Error", ack.error]);
-  const badge = ack.ok === false
-    ? `<span class="badge err">rejected</span>`
-    : `<span class="badge ok">ok</span>`;
-  return `${badge}<div class="kv">${rows.map(([k, v]) => `<div>${k}</div><div>${v}</div>`).join("")}</div>`;
+
+  pill.dataset.state = state;
+  if (text.textContent !== label) text.textContent = label;
 }
 
-function renderAckPanel() {
-  const el = $("#ack-panel");
-  if (S.ack) {
-    el.className = "";
-    el.innerHTML = ackHtml(S.ack);
+function renderOverride() {
+  const chip = $("#override-chip");
+  const label = $("#override-label");
+  const tx = S.tx;
+
+  if (tx && tx.override) {
+    const left = tx.override_indefinite ? null : fmtDur(tx.override_remaining_s);
+    chip.dataset.state = "active";
+    label.textContent = left ? "Override aktif, " + left : "Override aktif, sampai dilepas";
   } else {
-    el.className = "empty";
-    el.textContent = "No command ACK received yet.";
+    chip.dataset.state = "idle";
+    label.textContent = "Kontrol otomatis";
   }
 }
+
+function render() {
+  renderStatus();
+  renderOverride();
+
+  const tx = S.tx;
+  const roomTemp = tx ? fmtNum(tx.temp) : null;
+
+  /* --- unit A/C --- */
+  setValue("#ac-temp", "#ac-temp-unit", roomTemp ?? "—", roomTemp != null);
+  const fanState = tx && tx.fan_speed === "off" ? "off" : "";
+  setWord("#ac-fan", tx && tx.fan_speed ? FAN_LABEL[tx.fan_speed] || tx.fan_speed : "—", fanState || (tx ? "" : "off"));
+  if (tx && typeof tx.relay_on === "boolean") {
+    setWord("#ac-relay", tx.relay_on ? "Nyala" : "Mati", tx.relay_on ? "on" : "off");
+  } else {
+    setWord("#ac-relay", "—", "off");
+  }
+  setWord("#ac-lamp", "—", "off");
+
+  /* --- room sensors --- */
+  const hum = tx ? fmtNum(tx.hum) : null;
+  setValue("#ds-temp", "#ds-temp-unit", roomTemp ?? "—", roomTemp != null);
+  setValue("#ds-hum", "#ds-hum-unit", hum ?? "—", hum != null);
+  if (tx && typeof tx.motion === "boolean") {
+    setWord("#ds-motion", tx.motion ? "Ya" : "Tidak", tx.motion ? "" : "off");
+  } else {
+    setWord("#ds-motion", "—", "off");
+  }
+
+  const updated = tx ? fmtTime(tx.timestamp) : null;
+  $("#sensor-updated").textContent = updated ? "Diperbarui " + updated : "Menunggu data";
+
+  /* --- outside weather --- */
+  const w = S.weather;
+  let wxTemp = w && w.main ? w.main.temp : null;
+  if (Number.isFinite(wxTemp) && wxTemp > 120) wxTemp -= 273.15; /* Kelvin → Celsius */
+  const wxTempText = fmtNum(wxTemp);
+  const wxHumText = fmtNum(w && w.main ? w.main.humidity : null, 0);
+  setValue("#wx-temp", "#wx-temp-unit", wxTempText ?? "—", wxTempText != null);
+  setValue("#wx-hum", "#wx-hum-unit", wxHumText ?? "—", wxHumText != null);
+
+  const condition = w && w.weather && w.weather[0] ? String(w.weather[0].main || "") : "";
+  if (condition) {
+    const raining = /rain|drizzle|thunder|shower|hujan/i.test(condition);
+    setWord("#wx-rain", raining ? "Ya" : "Tidak", "");
+    $("#weather-desc").textContent = WEATHER_ID[condition.toLowerCase()] || condition;
+  } else {
+    setWord("#wx-rain", "—", "off");
+    $("#weather-desc").textContent = "—";
+  }
+}
+
+/* ============================================================
+   Commands
+   ============================================================ */
+function feedback(message, kind) {
+  const el = $("#feedback");
+  el.textContent = message;
+  el.dataset.kind = kind || "";
+}
+
+function setBusy(busy) {
+  C.busy = busy;
+  ["#btn-apply", "#btn-duration", "#btn-release"].forEach((id) => { $(id).disabled = busy; });
+  $("#actions").setAttribute("aria-busy", busy ? "true" : "false");
+}
+
+function describeSelection() {
+  const fan = (FAN_LABEL[C.fan] || C.fan).toLowerCase();
+  const duration = (DURATION_LABEL[C.duration] ?? C.duration + " detik").toLowerCase();
+  return C.temp + " °C, kipas " + fan + ", A/C " + (C.ac ? "nyala" : "mati") + ", " + duration;
+}
+
+async function sendCommand(body, successMessage) {
+  setBusy(true);
+  feedback("Mengirim perintah…");
+
+  try {
+    const res = await fetch(API + "/command", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...body,
+        request_id: "dash-" + Math.floor(Date.now() / 1000) + "-" + Math.random().toString(16).slice(2, 8),
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      feedback("Gagal mengirim perintah: " + (data.detail || res.statusText) + ".", "err");
+    } else if (data.ack && data.ack.ok === false) {
+      feedback("Ditolak: " + (data.ack.error || "perangkat menolak perintah") + ".", "err");
+    } else if (data.ack) {
+      C.dirty = false;
+      feedback(successMessage, "ok");
+    } else {
+      C.dirty = false;
+      feedback("Perintah terkirim, tetapi perangkat belum mengonfirmasi.", "warn");
+    }
+  } catch (e) {
+    feedback("Tidak dapat menghubungi API.", "err");
+  } finally {
+    setBusy(false);
+    renderControls();
+    poll();
+  }
+}
+
+function applyOverride() {
+  /* Reflect the applied values until the next telemetry frame arrives. */
+  if (S.tx) S.tx = { ...S.tx, target_temp: C.temp, fan_speed: C.fan, relay_on: C.ac };
+  sendCommand(
+    { action: "override", relay_on: C.ac, target_temp: C.temp, fan_speed: C.fan, duration_s: C.duration },
+    "Override diterapkan: " + describeSelection() + "."
+  );
+}
+
+function releaseOverride() {
+  sendCommand({ action: "release" }, "Override dilepas. Kontrol otomatis kembali aktif.");
+}
+
+/* ============================================================
+   Control wiring
+   ============================================================ */
+function editTemp(delta) {
+  C.temp = Math.min(30, Math.max(16, C.temp + delta));
+  C.dirty = true;
+  renderControls();
+}
+function cycleFan() {
+  C.fan = FANS[(FANS.indexOf(C.fan) + 1) % FANS.length];
+  C.dirty = true;
+  renderControls();
+}
+function toggleAc() {
+  C.ac = !C.ac;
+  C.dirty = true;
+  renderControls();
+}
+function cycleDuration() {
+  C.duration = DURATIONS[(DURATIONS.indexOf(C.duration) + 1) % DURATIONS.length];
+  renderControls();
+}
+
+$("#ctl-temp-down").addEventListener("click", (e) => { e.stopPropagation(); editTemp(-1); });
+$("#ctl-temp-up").addEventListener("click", (e) => { e.stopPropagation(); editTemp(1); });
+$("#ctl-fan").addEventListener("click", cycleFan);
+$("#ctl-ac").addEventListener("click", toggleAc);
+$("#btn-apply").addEventListener("click", applyOverride);
+$("#btn-duration").addEventListener("click", cycleDuration);
+$("#btn-release").addEventListener("click", releaseOverride);
 
 /* ============================================================
    Polling
    ============================================================ */
 let polling = false;
-async function fastPoll() {
+async function poll() {
   if (document.hidden || polling) return;
   polling = true;
-  const [health, txs, rxs, tx, rx, weather, ack] = await Promise.all([
-    jget("/health"),
-    jget("/transmit/status/latest"),
-    jget("/receive/status/latest"),
-    jget("/transmit/latest"),
-    jget("/receive/latest"),
-    jget("/weather/latest"),
-    jget("/command/latest"),
-  ]);
-  S.apiOnline = !health.err;
-  if (health.data) S.health = health.data;
-  if (txs.data !== null || !txs.err) S.txStatus = txs.data;
-  if (rxs.data !== null || !rxs.err) S.rxStatus = rxs.data;
-  if (tx.data) S.tx = tx.data;
-  if (rx.data) S.rx = rx.data;
-  if (weather.data) S.weather = weather.data;
-  if (ack.data) S.ack = ack.data;
-  renderPills();
-  renderCards();
-  renderAckPanel();
-  polling = false;
-}
-
-async function slowPoll() {
-  if (document.hidden) return;
-  const [txh, rxh] = await Promise.all([jget("/history/transmit"), jget("/history/receive")]);
-  if (txh.data) refreshCharts(txh.data, rxh.data || []);
-}
-
-setInterval(fastPoll, 3000);
-setInterval(slowPoll, 6000);
-fastPoll();
-slowPoll();
-
-/* ============================================================
-   Control interface
-   ============================================================ */
-function currentDuration() {
-  const v = parseInt($("#ctl-duration").value, 10);
-  return Number.isFinite(v) ? Math.min(86400, Math.max(0, v)) : 60;
-}
-
-function buildCommand() {
-  const mode = document.querySelector('input[name="mode"]:checked').value;
-  const payload = {};
-
-  if (mode === "release") {
-    payload.action = "release";
-    return { payload };
-  }
-
-  const duration = currentDuration();
-  if (duration < 0 || duration > 86400) return { error: "duration must be between 0 and 86400 seconds." };
-
-  if (mode === "raw") {
-    const code = $("#ctl-raw").value.trim();
-    const norm = code.replace(/^0[xX]/, "");
-    if (!/^[0-9a-fA-F]{1,8}$/.test(norm)) return { error: "IR code must be 1–8 hex digits, e.g. 0xA1DF15EA." };
-    payload.action = "raw";
-    payload.ir_code = code;
-    payload.duration_s = duration;
-    return { payload };
-  }
-
-  // mode === "override"
-  payload.action = "override";
-  payload.duration_s = duration;
-  const relay = $("#ctl-relay").value;
-  if (relay !== "keep") payload.relay_on = relay === "on";
-  if ($("#ctl-temp-enable").checked) payload.target_temp = parseInt($("#ctl-temp").value, 10);
-  const fan = $("#ctl-fan").value;
-  if (fan !== "keep") payload.fan_speed = fan;
-  if (!("relay_on" in payload) && !("target_temp" in payload) && !("fan_speed" in payload)) {
-    return { error: "Choose at least one override field: relay, setpoint or fan." };
-  }
-  if (payload.target_temp != null && (payload.target_temp < 16 || payload.target_temp > 30)) {
-    return { error: "target temp must be between 16 and 30 °C." };
-  }
-  return { payload };
-}
-
-function describeCommand(p) {
-  if (p.action === "release") return "release override";
-  const parts = [];
-  if ("relay_on" in p) parts.push("relay " + (p.relay_on ? "on" : "off"));
-  if ("target_temp" in p) parts.push(p.target_temp + " °C");
-  if ("fan_speed" in p) parts.push("fan " + p.fan_speed);
-  if ("ir_code" in p) parts.push("raw " + p.ir_code);
-  parts.push(fmtDur(p.duration_s ?? 0));
-  return parts.join(", ");
-}
-
-function renderPreview() {
-  const { payload, error } = buildCommand();
-  const el = $("#payload-preview");
-  if (error) el.textContent = "⚠ " + error;
-  else el.textContent = JSON.stringify(payload, null, 2);
-}
-
-const cmdLog = [];
-function logCommand(payload, ack, status, detail) {
-  cmdLog.unshift({
-    time: new Date().toLocaleTimeString([], { hour12: false }),
-    desc: describeCommand(payload),
-    status, detail, rid: payload.request_id,
-  });
-  if (cmdLog.length > 20) cmdLog.pop();
-  const ul = $("#cmd-log");
-  ul.innerHTML = cmdLog.map((e) => {
-    const badge = e.status === "ok" ? "ok" : e.status === "timeout" ? "warn" : "err";
-    const label = e.status === "ok" ? "ok" : e.status === "timeout" ? "no ack" : e.status;
-    return `<li>
-      <span class="t">${e.time}</span> ${e.desc}
-      <span class="badge ${badge}" style="float:right">${label}</span>
-      ${e.rid ? `<div class="rid mono">${e.rid}</div>` : ""}
-      ${e.detail ? `<div class="rid">${e.detail}</div>` : ""}
-    </li>`;
-  }).join("");
-}
-
-async function sendCommand() {
-  const built = buildCommand();
-  const result = $("#send-result");
-  result.className = "result show err";
-  if (built.error) {
-    result.textContent = "⚠ " + built.error;
-    return;
-  }
-  const payload = built.payload;
-  payload.request_id = "dash-" + Math.floor(Date.now() / 1000) + "-" +
-    Math.random().toString(16).slice(2, 8);
-
-  const btn = $("#send");
-  btn.disabled = true;
-  btn.textContent = "Sending…";
   try {
-    const r = await fetch(API + "/command", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) {
-      result.className = "result show err";
-      result.textContent = "⚠ " + (data.detail || r.statusText);
-      logCommand(payload, null, "rejected", data.detail || r.statusText);
-    } else if (data.ack) {
-      const ok = data.ack.ok !== false;
-      result.className = "result show " + (ok ? "ok" : "err");
-      result.innerHTML = ackHtml(data.ack, data.sent);
-      logCommand(payload, data.ack, ok ? "ok" : "error", data.ack.error);
-    } else {
-      result.className = "result show warn";
-      result.innerHTML = ackHtml(null, data.sent);
-      logCommand(payload, null, "timeout", data.detail);
-    }
-  } catch (e) {
-    result.className = "result show err";
-    result.textContent = "⚠ Could not reach the consumer API: " + e.message;
-    logCommand(payload, null, "network error", e.message);
+    const [health, tx, weather] = await Promise.all([
+      jget("/health"),
+      jget("/transmit/latest"),
+      jget("/weather/latest"),
+    ]);
+    S.online = !health.err;
+    S.loaded = true;
+    if (health.data) S.health = health.data;
+    if (tx.data) S.tx = tx.data;
+    if (weather.data) S.weather = weather.data;
+
+    syncControls();
+    render();
+    renderControls();
   } finally {
-    btn.disabled = false;
-    btn.textContent = "Send command";
-    renderPreview();
+    polling = false;
   }
 }
 
-/* ---------- control form wiring ---------- */
-document.querySelectorAll('input[name="mode"]').forEach((r) =>
-  r.addEventListener("change", () => {
-    const mode = document.querySelector('input[name="mode"]:checked').value;
-    $("#grp-override").classList.toggle("hidden", mode !== "override");
-    $("#grp-raw").classList.toggle("hidden", mode !== "raw");
-    $("#grp-release").classList.toggle("hidden", mode !== "release");
-    $("#grp-duration").classList.toggle("hidden", mode === "release");
-    renderPreview();
-  })
-);
-
-$("#ctl-temp-enable").addEventListener("change", (e) => {
-  $("#ctl-temp").disabled = !e.target.checked;
-  renderPreview();
-});
-$("#ctl-temp").addEventListener("input", () => {
-  $("#ctl-temp-val").textContent = $("#ctl-temp").value + " °C";
-  renderPreview();
-});
-["ctl-relay", "ctl-fan"].forEach((id) => $("#" + id).addEventListener("change", renderPreview));
-$("#ctl-raw").addEventListener("input", renderPreview);
-$("#ctl-duration").addEventListener("input", () => {
-  document.querySelectorAll("#dur-chips .chip").forEach((c) =>
-    c.classList.toggle("sel", parseInt(c.dataset.d, 10) === currentDuration()));
-  renderPreview();
-});
-document.querySelectorAll("#dur-chips .chip").forEach((chip) =>
-  chip.addEventListener("click", () => {
-    document.querySelectorAll("#dur-chips .chip").forEach((c) => c.classList.remove("sel"));
-    chip.classList.add("sel");
-    $("#ctl-duration").value = chip.dataset.d;
-    renderPreview();
-  })
-);
-$("#send").addEventListener("click", sendCommand);
-
-/* ---------- API base configuration ---------- */
-$("#api-base").value = API;
-function applyApiBase(showMsg) {
-  const v = $("#api-base").value.trim().replace(/\/+$/, "");
-  if (!v) return;
-  API = v;
-  localStorage.setItem("climate.apiBase", v);
-  if (showMsg) {
-    $("#api-msg").textContent = "saved — reconnecting…";
-    setTimeout(() => ($("#api-msg").textContent = ""), 2500);
-  }
-  fastPoll();
-  slowPoll();
-}
-$("#api-save").addEventListener("click", () => applyApiBase(true));
-$("#api-base").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") applyApiBase(true);
-});
-
-renderPreview();
+renderControls();
+render();
+setInterval(poll, POLL_MS);
+poll();
 </script>
 </body>
 </html>

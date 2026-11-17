@@ -603,7 +603,7 @@ def get_dashboard():
     raise HTTPException(status_code=404, detail="Dashboard not found")
 
 
-# Static assets (vendored Chart.js, ...). Mounted last so API routes match first.
+# Static assets (dashboard images, ...). Mounted last so API routes match first.
 if DASHBOARD_DIR.exists():
     app.mount("/static", StaticFiles(directory=DASHBOARD_DIR), name="static")
 
