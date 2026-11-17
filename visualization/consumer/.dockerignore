@@ -1,0 +1,22 @@
+**/node_modules
+**/dist
+**/.git
+.agents
+.claude
+.codex
+.aws
+.env
+.env.*
+!.env.example
+.cache
+playwright-report
+test-results
+coverage
+**/*.log
+**/*.tsbuildinfo
+server/test
+tests
+dashboard
+AC photo.png
+handover.md
+skills-lock.json

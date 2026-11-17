@@ -1,0 +1,359 @@
+.app-shell { display: flex; min-height: 100vh; }
+.sidebar { width: 228px; flex-shrink: 0; position: fixed; inset: 0 auto 0 0; background: var(--surface); border-right: 1px solid var(--line); padding: 32px 18px 0; display: flex; flex-direction: column; z-index: 20; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 0 9px; font-size: 24px; font-weight: 700; letter-spacing: -1px; line-height: 1.1; }
+.brand-mark { display: grid; place-items: center; width: 38px; height: 42px; color: var(--blue); background: var(--blue-soft); border-radius: 12px 12px 12px 3px; }
+.brand-light { font-weight: 400; }
+.brand small { display: block; letter-spacing: .12px; font-size: 11px; font-weight: 400; color: var(--muted); margin-top: 5px; }
+.workspace-label { display: flex; align-items: center; gap: 11px; border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin: 36px 4px 25px; font-size: 14px; font-weight: 600; }
+.workspace-label small { display: block; color: var(--muted); font-size: 12px; font-weight: 400; margin-top: 1px; }
+.workspace-icon { border: 1px solid var(--line); border-radius: 7px; width: 33px; height: 34px; display: grid; place-items: center; color: var(--secondary); background: var(--surface-subtle); }
+.navigation { display: grid; gap: 6px; }
+.nav-link { display: flex; align-items: center; gap: 11px; padding: 12px 14px; font-size: 14px; color: var(--secondary); border-radius: 7px; min-height: 45px; }
+.nav-link:hover { background: var(--surface-subtle); }
+.nav-link--active, .nav-link--active:hover { color: var(--blue); background: var(--blue-soft); font-weight: 600; }
+.nav-indicator { width: 5px; height: 5px; border-radius: 50%; background: currentColor; margin-left: auto; }
+.sidebar-bottom { margin-top: auto; padding-top: 30px; }
+.automation-note { padding: 19px 15px 20px; margin: 0 4px 27px; background: var(--surface-subtle); border: 1px solid var(--line); border-radius: 10px; }
+.automation-icon { display: flex; color: var(--teal); margin-bottom: 13px; }
+.automation-note strong { font-size: 13px; font-weight: 600; }
+.automation-note p { font-size: 12px; color: var(--muted); line-height: 1.65; margin-top: 5px; }
+.sidebar-footer { border-top: 1px solid var(--line); display: flex; align-items: center; gap: 7px; padding: 20px 4px; color: var(--muted); font-size: 11px; }
+.version { margin-left: auto; font-size: 10px; }
+.workspace { margin-left: 228px; min-width: 0; flex: 1; }
+.topbar { height: 77px; padding: 0 36px; border-bottom: 1px solid var(--line); background: var(--surface); display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.breadcrumb { display: flex; align-items: center; gap: 14px; color: var(--secondary); font-size: 13px; }
+.breadcrumb > svg { color: var(--muted); }
+.breadcrumb-divider { color: var(--strong-line); }
+.topbar-actions { display: flex; align-items: center; gap: 10px; }
+.topbar-divider { width: 1px; height: 22px; background: var(--line); margin: 0 9px; }
+.icon-button { display: grid; place-items: center; width: 34px; height: 36px; border: 0; border-radius: 7px; background: transparent; color: var(--secondary); }
+.icon-button:hover { background: var(--surface-subtle); color: var(--blue); }
+.icon-button:disabled { opacity: .6; }
+.main-content { max-width: 1440px; margin: 0 auto; padding: 35px 36px 0; }
+.page-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 29px; gap: 16px; }
+.page-context { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--secondary); margin-bottom: 6px; }
+.context-dot { width: 6px; height: 6px; border-radius: 2px; background: var(--blue); }
+h1 { font-size: 30px; letter-spacing: -.8px; font-weight: 600; line-height: 1.25; }
+.page-heading p { font-size: 14px; color: var(--muted); margin-top: 7px; }
+.date-display { text-align: right; color: var(--secondary); font-size: 13px; align-self: flex-end; padding-bottom: 1px; }
+.date-display small { display: flex; align-items: center; justify-content: flex-end; gap: 5px; color: var(--muted); font-size: 11px; margin-top: 7px; }
+.badge { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 5px 9px; border-radius: 5px; font-size: 11px; font-weight: 500; line-height: 1.2; white-space: nowrap; background: var(--surface-subtle); color: var(--secondary); }
+.badge--success { background: var(--teal-soft); color: var(--teal); }
+.badge--warning { background: var(--amber-soft); color: var(--amber); }
+.badge--danger { background: var(--red-soft); color: var(--red); }
+.badge--blue { background: var(--blue-soft); color: var(--blue); }
+.status-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; background: currentColor; display: inline-block; }
+.status-dot--live { color: var(--teal); }
+.connection-alert { display: flex; align-items: flex-start; gap: 10px; padding: 13px 16px; border: 1px solid var(--strong-line); border-radius: 8px; margin: -7px 0 22px; background: var(--surface); color: var(--secondary); font-size: 13px; line-height: 1.5; }
+.connection-alert svg { color: var(--amber); margin-top: 1px; }
+.connection-alert button { border: 0; background: none; color: var(--blue); white-space: nowrap; padding: 0 0 0 5px; font-weight: 600; margin-left: auto; }
+.dashboard-grid { display: grid; grid-template-columns: minmax(0, 1fr) 328px; gap: 24px; align-items: start; }
+.overview-column { min-width: 0; display: flex; flex-direction: column; gap: 24px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
+.climate-panel { background: var(--climate); color: var(--climate-text); border-radius: 13px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--climate-text) 7%, transparent); }
+.climate-heading { padding: 23px 24px 0; display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.climate-title { display: flex; align-items: center; gap: 11px; }
+.climate-icon { width: 37px; height: 37px; border-radius: 10px; background: color-mix(in srgb, var(--surface) 65%, transparent); display: grid; place-items: center; color: var(--blue); }
+h2 { font-size: 16px; font-weight: 600; letter-spacing: -.15px; }
+.climate-title p { color: var(--secondary); font-size: 11px; margin-top: 2px; }
+.climate-scene { display: flex; align-items: center; gap: 18px; padding: 31px 24px 30px; min-height: 205px; }
+.room-temperature { flex-shrink: 0; min-width: 170px; }
+.temperature-caption { font-size: 13px; color: var(--secondary); }
+.temperature-value { font-size: 78px; font-weight: 500; letter-spacing: -4px; line-height: 1.15; font-variant-numeric: tabular-nums; display: flex; align-items: flex-start; gap: 5px; }
+.temperature-value > span { font-size: 29px; letter-spacing: -1px; font-weight: 400; margin-top: 12px; }
+.temperature-meta { display: flex; align-items: center; gap: 6px; color: var(--secondary); font-size: 11px; margin-top: 8px; }
+.appliance-visual { flex: 1; min-width: 0; align-self: center; display: flex; align-items: center; flex-direction: column; padding-top: 10px; }
+.ac-photo { width: 100%; height: auto; object-fit: contain; filter: drop-shadow(0 12px 7px rgb(46 76 107 / 12%)); position: relative; z-index: 1; }
+.airflow { display: flex; gap: 19px; height: 34px; opacity: .22; margin-top: -3px; width: 70%; justify-content: center; }
+.airflow span { width: 1px; height: 30px; background: var(--blue); transform: rotate(-8deg); }
+.airflow span:nth-child(2) { height: 23px; transform: rotate(-4deg); }
+.airflow span:nth-child(3) { height: 32px; transform: rotate(0); }
+.airflow span:nth-child(4) { height: 23px; transform: rotate(4deg); }
+.airflow span:nth-child(5) { transform: rotate(8deg); }
+.appliance-label { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--secondary); margin-top: 1px; }
+.device-details { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0 24px; padding: 19px 0 17px; border-top: 1px solid color-mix(in srgb, var(--climate-text) 12%, transparent); }
+.device-detail { display: flex; align-items: flex-start; flex-direction: column; gap: 5px; padding-left: 17px; border-left: 1px solid color-mix(in srgb, var(--climate-text) 12%, transparent); }
+.device-detail:first-child { padding-left: 0; border: 0; }
+.device-detail svg { color: var(--secondary); width: 16px; height: 16px; margin-bottom: 4px; }
+.device-detail > span { color: var(--secondary); font-size: 11px; }
+.device-detail strong { font-size: 14px; font-weight: 600; line-height: 1.3; }
+.device-detail:last-child strong { font-size: 12px; font-weight: 400; color: var(--secondary); }
+.climate-footer { background: color-mix(in srgb, var(--surface) 32%, transparent); border-top: 1px solid color-mix(in srgb, var(--climate-text) 7%, transparent); padding: 10px 24px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; color: var(--secondary); font-size: 10px; }
+.climate-footer > span:first-child { display: flex; align-items: center; gap: 5px; }
+.override-remaining { color: var(--blue); }
+.section-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+.section-heading > span { font-size: 11px; color: var(--muted); }
+.sensor-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.sensor-card { padding: 17px 16px 13px; min-width: 0; display: flex; flex-direction: column; }
+.sensor-heading { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--secondary); margin-bottom: 16px; }
+.sensor-icon { width: 31px; height: 31px; display: grid; place-items: center; border-radius: 9px; }
+.sensor-icon--water { background: var(--blue-soft); color: var(--blue); }
+.sensor-icon--people { background: var(--teal-soft); color: var(--teal); }
+.sensor-icon--weather { background: var(--amber-soft); color: var(--amber); }
+.reading { font-size: 35px; font-weight: 600; line-height: 1.2; letter-spacing: -1px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.reading-unit { color: var(--muted); font-size: 20px; font-weight: 400; margin-left: 3px; }
+.sensor-card > p { font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+.sensor-footnote { font-size: 10px; display: flex; align-items: center; gap: 5px; color: var(--secondary); margin-top: auto; padding-top: 11px; }
+.humidity-track { height: 5px; border-radius: 5px; position: relative; background: linear-gradient(to right, #e6b780 0% 30%, #92c3c3 30% 60%, #80a4da 60%); margin: 21px 0 6px; opacity: .8; }
+.humidity-marker { position: absolute; width: 3px; height: 10px; border-radius: 1px; background: var(--text); left: 45%; top: -2px; box-shadow: 0 0 0 2px var(--surface); }
+.humidity-marker[data-level='low'] { left: 15%; }
+.humidity-marker[data-level='high'] { left: 80%; }
+.humidity-marker[data-level='unknown'] { display: none; }
+.activity-value { font-size: clamp(20px, 1.75vw, 27px); letter-spacing: -.8px; font-weight: 600; line-height: 42px; }
+.occupancy-visual { display: flex; align-items: center; gap: 6px; height: 30px; padding-top: 10px; color: var(--strong-line); margin-top: 9px; }
+.occupancy-visual svg { width: 21px; height: 21px; }
+.occupancy-visual > span { width: 4px; height: 4px; background: var(--strong-line); border-radius: 50%; }
+.weather-location { display: flex; align-items: center; gap: 3px; color: var(--muted); font-size: 11px; margin-top: 15px; min-height: 17px; }
+.weather-location span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.automation-strip { display: flex; align-items: center; gap: 13px; padding: 0 2px; }
+.automation-strip-icon { color: var(--blue); display: grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0; border: 1px solid var(--strong-line); border-radius: 50%; }
+.automation-strip strong { font-weight: 600; font-size: 12px; }
+.automation-strip p { font-size: 11px; line-height: 1.5; color: var(--muted); margin-top: 3px; max-width: 65ch; }
+.automation-strip > a { color: var(--muted); display: grid; place-items: center; min-width: 30px; height: 34px; margin-left: auto; }
+.manual-panel { padding: 23px 22px 16px; scroll-margin-top: 20px; }
+.panel-heading { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 23px; }
+.heading-icon { color: var(--secondary); margin-top: 2px; }
+.panel-heading p { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.control-fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
+.control-fieldset:disabled { opacity: .7; }
+.power-row { display: flex; align-items: center; justify-content: space-between; padding-bottom: 19px; border-bottom: 1px solid var(--line); }
+.control-label { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500; }
+.control-label svg { color: var(--muted); width: 16px; height: 16px; }
+.switch { width: 38px; height: 23px; padding: 3px; border-radius: 14px; border: 0; background: var(--strong-line); display: flex; align-items: center; }
+.switch[aria-checked='true'] { background: var(--blue); }
+.switch-thumb { width: 17px; height: 17px; background: #fff; border-radius: 50%; box-shadow: 0 1px 2px rgb(0 0 0 / 10%); transition: transform .15s; }
+.switch[aria-checked='true'] .switch-thumb { transform: translateX(15px); }
+.temperature-control { padding: 23px 0 19px; text-align: center; }
+.temperature-control > label { font-size: 12px; color: var(--secondary); }
+.stepper { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 14px 0 18px; }
+.target-value { font-size: 53px; font-weight: 500; letter-spacing: -2px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.target-value > span { font-size: 23px; letter-spacing: -.6px; margin-left: 2px; font-weight: 400; color: var(--muted); }
+.temperature-control--off .target-value { color: var(--muted); }
+.stepper-button { display: grid; place-items: center; height: 34px; width: 34px; border: 1px solid var(--strong-line); background: var(--surface); border-radius: 50%; color: var(--secondary); }
+.stepper-button:hover { background: var(--blue-soft); color: var(--blue); border-color: var(--blue); }
+.stepper-button:disabled { opacity: .35; }
+input[type='range'] { display: block; width: 100%; height: 16px; margin: 0; accent-color: var(--blue); cursor: pointer; }
+.range-labels { display: flex; align-items: center; justify-content: space-between; color: var(--muted); font-size: 10px; margin-top: 5px; }
+.fan-control { margin-bottom: 24px; }
+.segmented-control { display: flex; gap: 3px; margin-top: 11px; padding: 4px; border-radius: 7px; background: var(--surface-subtle); border: 1px solid var(--line); }
+.segmented-control button { flex: 1; background: none; border: 1px solid transparent; padding: 6px 2px; color: var(--secondary); font-size: 11px; border-radius: 5px; min-height: 30px; }
+.segmented-control button[aria-pressed='true'] { background: var(--surface); border-color: var(--line); color: var(--blue); font-weight: 600; box-shadow: var(--shadow); }
+.duration-control { display: grid; gap: 10px; margin-bottom: 20px; }
+.duration-control select { padding: 10px 11px; background: var(--surface); border: 1px solid var(--strong-line); border-radius: 7px; color: var(--text); font-size: 12px; width: 100%; }
+.button { display: flex; align-items: center; justify-content: center; gap: 7px; min-height: 41px; font-size: 12px; font-weight: 600; border: 1px solid transparent; border-radius: 7px; padding: 10px 12px; width: 100%; }
+.button--primary { background: #2669ce; color: #fff; border-color: #2669ce; }
+.button--primary:hover { background: #1d57b0; border-color: #1d57b0; }
+.button--secondary { border-color: var(--strong-line); background: var(--surface); color: var(--secondary); margin-top: 9px; font-weight: 500; }
+.button--secondary:hover { background: var(--surface-subtle); color: var(--text); }
+.button:disabled { opacity: .48; }
+.control-feedback { min-height: 42px; padding-top: 12px; }
+.control-hint { font-size: 10px; line-height: 1.6; color: var(--muted); text-align: center; padding: 0 3px; }
+.feedback { display: flex; gap: 6px; font-size: 11px; line-height: 1.5; padding: 9px; border-radius: 6px; overflow-wrap: anywhere; }
+.feedback svg { margin-top: 1px; }
+.feedback--success { color: var(--teal); background: var(--teal-soft); }
+.feedback--warning { color: var(--amber); background: var(--amber-soft); }
+.feedback--danger { color: var(--red); background: var(--red-soft); }
+.system-section { margin-top: 27px; padding: 20px 24px 21px; }
+.system-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 19px; }
+.system-heading > span { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 10px; }
+.system-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 19px; }
+.system-item { display: flex; align-items: center; gap: 10px; padding-right: 19px; border-right: 1px solid var(--line); min-width: 0; }
+.system-item:last-child { padding-right: 0; border: 0; }
+.system-icon { color: var(--muted); flex-shrink: 0; }
+.system-icon--online { color: var(--teal); }
+.system-icon--offline { color: var(--red); }
+.system-copy { min-width: 0; }
+.system-copy h3 { font-size: 12px; font-weight: 600; }
+.system-copy p { font-size: 10px; color: var(--muted); margin-top: 3px; line-height: 1.5; }
+.system-item > .badge { font-size: 9px; padding: 4px 6px; margin-left: auto; }
+.page-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 23px 1px; font-size: 10px; color: var(--muted); }
+.footer-separator { margin: 0 8px; color: var(--strong-line); }
+
+@media (min-width: 1500px) {
+  .main-content { padding-top: 43px; }
+  .dashboard-grid { grid-template-columns: minmax(0, 1fr) 350px; gap: 28px; }
+  .climate-scene { min-height: 240px; padding: 36px 32px; }
+  .climate-heading { padding: 26px 32px 0; }
+  .device-details { margin-inline: 32px; }
+  .room-temperature { min-width: 210px; }
+  .temperature-value { font-size: 88px; }
+  .sensor-card { padding: 21px 20px 17px; }
+  .manual-panel { padding: 26px 26px 21px; }
+}
+@media (max-width: 1240px) {
+  .sidebar { width: 200px; padding-inline: 12px; }
+  .workspace { margin-left: 200px; }
+  .brand { font-size: 21px; gap: 8px; }
+  .brand-mark { width: 33px; }
+  .topbar { padding-inline: 25px; }
+  .main-content { padding-inline: 25px; }
+  .dashboard-grid { grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; }
+  .climate-heading { padding-inline: 20px; }
+  .climate-scene { padding-inline: 20px; gap: 8px; }
+  .room-temperature { min-width: 145px; }
+  .temperature-value { font-size: 65px; }
+  .temperature-value > span { font-size: 24px; }
+  .device-details { margin-inline: 20px; }
+  .device-detail { padding-left: 12px; }
+  .sensor-grid { gap: 10px; }
+  .sensor-card { padding-inline: 12px; }
+  .sensor-heading { gap: 5px; font-size: 11px; }
+  .sensor-icon { width: 25px; height: 27px; border-radius: 6px; }
+  .sensor-icon svg { width: 17px; }
+  .activity-value { font-size: 22px; }
+  .system-grid { gap: 13px; }
+  .system-item { padding-right: 13px; flex-wrap: wrap; gap: 8px; }
+  .system-item > .badge { margin-left: 28px; }
+}
+@media (max-width: 1050px) {
+  .sidebar { width: 78px; align-items: center; padding-inline: 12px; }
+  .brand { padding: 0; }
+  .brand > span:last-child, .workspace-label, .nav-link > span, .automation-note, .sidebar-footer { display: none; }
+  .brand-mark { width: 42px; height: 42px; }
+  .navigation { width: 100%; margin-top: 42px; gap: 12px; }
+  .nav-link { justify-content: center; padding: 14px 9px; }
+  .workspace { margin-left: 78px; }
+  .date-display { font-size: 12px; }
+  .system-item { align-content: start; }
+}
+@media (max-width: 850px) {
+  .main-content { padding: 27px 22px 0; }
+  .topbar { padding-inline: 22px; height: 65px; }
+  .dashboard-grid { grid-template-columns: minmax(0, 1fr); }
+  .overview-column { gap: 22px; }
+  .climate-scene { padding: 24px 28px; min-height: 210px; gap: 32px; }
+  .climate-heading { padding-inline: 28px; }
+  .room-temperature { min-width: 195px; }
+  .temperature-value { font-size: 78px; }
+  .appliance-visual { max-width: 350px; margin-left: auto; }
+  .device-details { margin-inline: 28px; }
+  .device-detail { padding-left: 25px; }
+  .sensor-grid { gap: 14px; }
+  .sensor-card { padding: 17px 18px 14px; }
+  .sensor-heading { font-size: 12px; gap: 7px; }
+  .sensor-icon { width: 31px; height: 31px; }
+  .activity-value { font-size: 26px; }
+  .manual-panel { padding: 22px; }
+  .control-fieldset { display: grid; grid-template-columns: 1fr 1fr; column-gap: 30px; }
+  .power-row { grid-column: 1 / -1; }
+  .temperature-control { grid-column: 1; grid-row: 2 / 4; padding-bottom: 7px; }
+  .fan-control { grid-column: 2; grid-row: 2; padding-top: 24px; margin-bottom: 20px; }
+  .duration-control { grid-column: 2; grid-row: 3; }
+  .apply-button { grid-column: 1; }
+  .release-button { grid-column: 2; margin-top: 0; }
+  .control-feedback { min-height: auto; }
+  .system-section { margin-top: 22px; padding: 20px; }
+  .system-copy h3 { font-size: 11px; }
+  .date-display { display: none; }
+}
+@media (max-width: 600px) {
+  html { scroll-padding-top: 25px; }
+  .app-shell { display: block; }
+  .sidebar { position: static; width: 100%; padding: 17px 18px 0; display: block; border-right: 0; border-bottom: 1px solid var(--line); }
+  .brand { font-size: 22px; gap: 10px; width: max-content; }
+  .brand > span:last-child { display: block; }
+  .brand-mark { width: 35px; height: 37px; border-radius: 9px 9px 9px 3px; }
+  .brand-mark svg { width: 23px; }
+  .brand small { font-size: 10px; }
+  .sidebar-bottom { display: none; }
+  .navigation { display: flex; gap: 7px; margin-top: 19px; }
+  .nav-link { gap: 6px; font-size: 11px; border-radius: 7px 7px 0 0; flex: 1; padding: 11px 4px 12px; min-height: 41px; }
+  .nav-link > span { display: inline; }
+  .nav-link > .nav-indicator { display: none; }
+  .nav-link svg { width: 15px; height: 15px; }
+  .workspace { margin-left: 0; }
+  .topbar { height: 51px; padding-inline: 18px; background: var(--bg); }
+  .breadcrumb { gap: 8px; font-size: 11px; }
+  .breadcrumb svg { width: 14px; }
+  .topbar-actions { gap: 3px; }
+  .topbar-actions .badge { font-size: 10px; padding: 5px 6px; }
+  .topbar-divider { margin-inline: 5px; height: 17px; }
+  .icon-button { width: 30px; height: 34px; }
+  .icon-button svg { width: 16px; }
+  .main-content { padding: 23px 16px 0; }
+  .page-heading { margin-bottom: 22px; }
+  .page-context { display: none; }
+  h1 { font-size: 26px; }
+  .page-heading p { font-size: 12px; margin-top: 6px; }
+  .connection-alert { font-size: 11px; padding: 11px 12px; }
+  .connection-alert button { align-self: center; }
+  .climate-heading { padding: 19px 19px 0; }
+  .climate-heading .badge { font-size: 10px; }
+  .climate-title { gap: 8px; }
+  .climate-icon { width: 32px; height: 33px; border-radius: 8px; }
+  h2 { font-size: 15px; }
+  .climate-title h2 { font-size: 14px; }
+  .climate-scene { padding: 25px 19px 23px; gap: 10px; min-height: 185px; }
+  .room-temperature { min-width: 133px; }
+  .temperature-caption { font-size: 11px; }
+  .temperature-value { font-size: 65px; letter-spacing: -3px; gap: 3px; }
+  .temperature-value > span { font-size: 23px; margin-top: 9px; }
+  .temperature-meta { font-size: 9px; gap: 4px; }
+  .appliance-visual { padding-top: 15px; }
+  .airflow { gap: 12px; height: 26px; }
+  .airflow span { height: 23px; }
+  .airflow span:nth-child(2n) { height: 18px; }
+  .airflow span:nth-child(3) { height: 25px; }
+  .appliance-label { font-size: 9px; }
+  .device-details { margin-inline: 19px; padding-top: 16px; }
+  .device-detail { padding-left: 12px; }
+  .device-detail > span { font-size: 10px; }
+  .device-detail strong { font-size: 13px; }
+  .device-detail:last-child strong { font-size: 10px; }
+  .device-detail svg { width: 15px; height: 15px; }
+  .climate-footer { padding-inline: 19px; font-size: 9px; }
+  .section-heading { margin-bottom: 12px; }
+  .section-heading > span { font-size: 10px; }
+  .sensor-grid { gap: 9px; }
+  .sensor-card { padding: 13px 11px 12px; border-radius: 9px; }
+  .sensor-heading { flex-direction: column; align-items: flex-start; gap: 8px; margin-bottom: 13px; font-size: 11px; }
+  .sensor-icon { width: 28px; height: 28px; }
+  .reading { font-size: 28px; letter-spacing: -1px; }
+  .reading-unit { font-size: 16px; margin-left: 1px; }
+  .activity-value { font-size: 19px; letter-spacing: -.6px; line-height: 34px; }
+  .sensor-card > p { font-size: 10px; min-height: 30px; }
+  .sensor-footnote { font-size: 9px; gap: 3px; line-height: 1.4; flex-wrap: wrap; }
+  .sensor-footnote svg { width: 11px; }
+  .humidity-track { margin-top: 16px; margin-bottom: 6px; }
+  .occupancy-visual { margin-top: 4px; }
+  .weather-location { font-size: 9px; margin-top: 12px; }
+  .automation-strip { gap: 10px; }
+  .automation-strip-icon { width: 31px; height: 31px; }
+  .automation-strip strong { font-size: 11px; }
+  .automation-strip p { font-size: 10px; }
+  .manual-panel { padding: 21px; }
+  .control-fieldset { display: block; }
+  .temperature-control { padding: 23px 12px 22px; }
+  .stepper { justify-content: center; gap: 37px; }
+  .target-value { font-size: 60px; }
+  .fan-control { padding-top: 0; margin-bottom: 22px; }
+  .duration-control { margin-bottom: 20px; }
+  .release-button { margin-top: 9px; }
+  .button { font-size: 13px; min-height: 44px; }
+  .control-label { font-size: 13px; }
+  .segmented-control button { min-height: 34px; font-size: 12px; }
+  .duration-control select { font-size: 13px; min-height: 42px; }
+  .control-hint { font-size: 11px; }
+  .system-section { padding: 19px; }
+  .system-heading > span { font-size: 9px; gap: 4px; }
+  .system-heading > span svg { width: 12px; }
+  .system-grid { display: flex; flex-direction: column; gap: 14px; }
+  .system-item { flex-wrap: nowrap; border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 14px; gap: 12px; }
+  .system-item:last-child { padding-bottom: 0; border: 0; }
+  .system-item > .badge { margin-left: auto; }
+  .system-copy h3 { font-size: 12px; }
+  .system-copy p { font-size: 10px; }
+  .page-footer { flex-wrap: wrap; justify-content: center; text-align: center; gap: 6px; font-size: 9px; padding-block: 21px; }
+}
+@media (max-width: 360px) {
+  .main-content { padding-inline: 12px; }
+  .breadcrumb { display: none; }
+  .topbar-actions { margin-left: auto; }
+  .climate-heading { padding-inline: 14px; }
+  .climate-scene { padding-inline: 14px; gap: 6px; }
+  .temperature-value { font-size: 57px; }
+  .room-temperature { min-width: 125px; }
+  .sensor-card { padding-inline: 8px; }
+  .activity-value { font-size: 17px; }
+  .device-detail { padding-left: 8px; }
+}

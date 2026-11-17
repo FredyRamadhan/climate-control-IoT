@@ -1,0 +1,41 @@
+services:
+  consumer:
+    build:
+      context: .
+      target: production
+    image: auto-climate-consumer:latest
+    init: true
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8000}:${PORT:-8000}"
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: ${PORT:-8000}
+      # Set MQTT_HOST to a broker DNS name/IP or the service name on a shared network.
+      # host.docker.internal reaches a broker running on the Docker host.
+      MQTT_HOST: ${MQTT_HOST:-host.docker.internal}
+      MQTT_PORT: ${MQTT_PORT:-1883}
+      MQTT_PROTOCOL: ${MQTT_PROTOCOL:-mqtt}
+      MQTT_USER: ${MQTT_USER-iot_user}
+      MQTT_PASS: ${MQTT_PASS-iot_password}
+      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID:-}
+      COMMAND_ACK_TIMEOUT: ${COMMAND_ACK_TIMEOUT:-6}
+      COMMAND_PUBLISH_TIMEOUT: ${COMMAND_PUBLISH_TIMEOUT:-2}
+      STALE_AFTER_SECONDS: ${STALE_AFTER_SECONDS:-30}
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid
+    stop_grace_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"

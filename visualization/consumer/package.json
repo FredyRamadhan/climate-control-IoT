@@ -1,0 +1,36 @@
+{
+  "name": "auto-climate-consumer",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "frontend"
+  ],
+  "description": "Express MQTT consumer and React dashboard for Auto-Climate Control.",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "concurrently --kill-others --names api,web \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "node --watch server/index.js",
+    "dev:client": "npm run dev --workspace @auto-climate/frontend -- --host 0.0.0.0",
+    "build": "npm run build --workspace @auto-climate/frontend",
+    "start": "node server/index.js",
+    "test": "node --test server/test/*.test.js",
+    "test:ui": "npm run build && playwright test",
+    "check": "npm test && npm run build"
+  },
+  "dependencies": {
+    "compression": "^1.8.1",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "mqtt": "^5.14.1",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.1",
+    "concurrently": "^9.2.1",
+    "mqtt-packet": "^9.0.2"
+  }
+}
