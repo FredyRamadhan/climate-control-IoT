@@ -3,6 +3,7 @@
 An IoT automation system for conventional air conditioners based on PIR motion occupancy, ambient temperature/humidity metrics, and external weather data fetched via the OpenWeatherMap API over an authenticated MQTT broker.
 
 Comprehensive multi-page documentation and technical specifications:
+- [Production Deployment Guide (`deployment-guide.md`)](./deployment-guide.md)
 - [System Documentation Hub (`docs/README.md`)](./docs/README.md)
   - [System Architecture & Topology (`docs/system-architecture.md`)](./docs/system-architecture.md)
   - [MQTT Wire Protocol & Payloads (`docs/mqtt-protocol-and-topics.md`)](./docs/mqtt-protocol-and-topics.md)
@@ -11,6 +12,7 @@ Comprehensive multi-page documentation and technical specifications:
   - [Frontend Dashboard & Web Application (`docs/frontend-dashboard.md`)](./docs/frontend-dashboard.md)
   - [Analytics, ML & Streamlit Hub (`docs/analytics-and-ml.md`)](./docs/analytics-and-ml.md)
   - [Message Broker & Infrastructure (`docs/broker-and-infrastructure.md`)](./docs/broker-and-infrastructure.md)
+  - [Production Deployment Guide (`docs/deployment-guide.md`)](./docs/deployment-guide.md)
   - [Utilities, CLI Tools & Testing (`docs/utilities-and-testing.md`)](./docs/utilities-and-testing.md)
 
 ---

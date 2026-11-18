@@ -20,7 +20,10 @@
 #define PIN_LIGHT_RELAY  12  // D6 (GPIO12) - Relay actuator for lightbulb switch
 
 // Most opto-isolated relay boards are active-LOW. Set false for active-HIGH.
+// Can be overridden per board in secrets.h.
+#ifndef LIGHT_RELAY_ACTIVE_LOW
 #define LIGHT_RELAY_ACTIVE_LOW true
+#endif
 
 // ==========================================
 // Constants & Configuration
@@ -39,6 +42,9 @@
 #define MOTION_RECENT_MS      300000UL   // 5 minutes
 #define MOTION_IDLE_MS        600000UL   // 10 minutes
 #define LIGHT_IDLE_MS         7200000UL  // 2 hours idle auto turn-off for light (2 * 60 * 60 * 1000 ms)
+
+// Firmware identification, published in telemetry for field diagnostics.
+#define FW_VERSION            "2.1.0"
 
 // Manual override defaults
 #define OVERRIDE_DEFAULT_SEC  60UL      // duration used when duration_s is omitted
@@ -100,6 +106,7 @@ IRsend irSender(PIN_IR_EMIT);
 // Rule engine state
 bool relayOn = false;                 // AC power relay state (also sent via IR)
 bool lightRelayOn = false;            // Lightbulb relay actuator state
+bool lightPinHigh = false;            // Last level driven on GPIO12
 uint8_t targetTempC = 24;             // AC target/setpoint temperature
 FanSpeed fanSpeed = FAN_OFF;
 
@@ -147,14 +154,14 @@ void applyControlRules(bool motion, float tempC, float hum);
 void setLightRelay(bool state) {
   bool changed = (state != lightRelayOn);
   lightRelayOn = state;
-  if (LIGHT_RELAY_ACTIVE_LOW) {
-    digitalWrite(PIN_LIGHT_RELAY, state ? LOW : HIGH);
-  } else {
-    digitalWrite(PIN_LIGHT_RELAY, state ? HIGH : LOW);
-  }
+  lightPinHigh = LIGHT_RELAY_ACTIVE_LOW ? !state : state;
+  digitalWrite(PIN_LIGHT_RELAY, lightPinHigh ? HIGH : LOW);
   if (changed) {
     Serial.print("[Relay] Light bulb ");
-    Serial.println(state ? "ON" : "OFF");
+    Serial.print(state ? "ON" : "OFF");
+    Serial.print(" (GPIO12=");
+    Serial.print(digitalRead(PIN_LIGHT_RELAY) ? "HIGH" : "LOW");
+    Serial.println(LIGHT_RELAY_ACTIVE_LOW ? ", active-LOW)" : ", active-HIGH)");
   }
 }
 
@@ -452,15 +459,14 @@ void applyControlRules(bool motion, float tempC, float hum) {
     relayOn = false;
   }
 
-  // Light rule: auto turn on based on occupancy, auto turn off after 2 hours idle
-  if (recent2h) {
-    if (!lightRelayOn) {
-      setLightRelay(true);
-    }
-  } else {
-    if (lightRelayOn) {
-      setLightRelay(false);
-    }
+  // Light rule: the PIR handler turns the relay on the moment motion is
+  // detected. Here we only auto-off after 2 hours without motion.
+  //
+  // Do NOT turn the relay back on from stale motion history: doing so silently
+  // undoes a manual light-off as soon as the override timer expires, because
+  // "motion within the last 2 hours" is still true.
+  if (!recent2h && lightRelayOn) {
+    setLightRelay(false);
   }
 
   // Temperature rules. Rule 2 has priority over rule 4 during the 5-10 minute
@@ -516,6 +522,7 @@ void publishTelemetry(bool motion, float tempC, float hum, bool sensorOk,
   }
 
   JsonDocument doc;
+  doc["fw_version"] = FW_VERSION;
   doc["motion"] = motion;
   doc["temp"] = round1(tempC);          // measured room temperature
   doc["hum"] = round1(hum);
@@ -523,6 +530,13 @@ void publishTelemetry(bool motion, float tempC, float hum, bool sensorOk,
   doc["fan_speed"] = fanSpeedToString(fanSpeed);
   doc["relay_on"] = relayOn;
   doc["light_on"] = lightRelayOn;
+  // Raw GPIO12 level read back from the pin. On an active-LOW module,
+  // light_on=false must read HIGH here. If this is LOW while light_on is
+  // false, the sketch/pin configuration is wrong; if it is HIGH and the lamp
+  // is still lit, the relay module or its wiring is the problem.
+  doc["light_pin_cmd"] = lightPinHigh ? 1 : 0;
+  doc["light_pin_read"] = digitalRead(PIN_LIGHT_RELAY) ? 1 : 0;
+  doc["light_active_low"] = LIGHT_RELAY_ACTIVE_LOW;
   doc["target_temp"] = targetTempC;     // value transmitted via IR
   doc["sensor_ok"] = sensorOk;
   doc["ir_sent"] = irSent;

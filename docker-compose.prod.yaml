@@ -1,0 +1,128 @@
+services:
+  broker:
+    image: eclipse-mosquitto:2
+    container_name: iot-mosquitto-broker
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./broker/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./broker/passwd:/mosquitto/config/passwd:ro
+      - ./broker/data:/mosquitto/data
+      - ./broker/log:/mosquitto/log
+    networks:
+      - iot-network
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -t '$$SYS/#' -C 1 -u iot_user -P iot_password || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  analytics:
+    build:
+      context: ./visualization/analytics
+    image: auto-climate-analytics:latest
+    container_name: iot-analytics-adapter
+    init: true
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=32m,noexec,nosuid
+    expose:
+      - "8001"
+    stop_grace_period: 15s
+    networks:
+      - iot-network
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  consumer:
+    build:
+      context: ./visualization/consumer
+      target: production
+    image: auto-climate-consumer:latest
+    container_name: iot-consumer-web
+    init: true
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 8000
+      MQTT_HOST: broker
+      MQTT_PORT: 1883
+      MQTT_PROTOCOL: mqtt
+      MQTT_USER: ${MQTT_USER:-iot_user}
+      MQTT_PASS: ${MQTT_PASS:-iot_password}
+      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID:-}
+      COMMAND_ACK_TIMEOUT: ${COMMAND_ACK_TIMEOUT:-6}
+      COMMAND_PUBLISH_TIMEOUT: ${COMMAND_PUBLISH_TIMEOUT:-2}
+      STALE_AFTER_SECONDS: ${STALE_AFTER_SECONDS:-30}
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
+      ANALYTICS_URL: http://analytics:8001
+    depends_on:
+      broker:
+        condition: service_healthy
+      analytics:
+        condition: service_started
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid
+    stop_grace_period: 15s
+    networks:
+      - iot-network
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  producer:
+    build:
+      context: ./utils/api-producer
+    image: auto-climate-producer:latest
+    container_name: iot-weather-producer
+    restart: unless-stopped
+    # The producer reads its own settings (API key, city, poll interval) from
+    # utils/api-producer/.env. A repository-root .env is also accepted; values
+    # in the producer file take precedence because it is listed last.
+    env_file:
+      - path: ./.env
+        required: false
+      - path: ./utils/api-producer/.env
+        required: false
+    environment:
+      # Container-network overrides only; do not shadow the weather settings.
+      MQTT_HOST: broker
+      MQTT_PORT: 1883
+      MQTT_USER: ${MQTT_USER:-iot_user}
+      MQTT_PASS: ${MQTT_PASS:-iot_password}
+    depends_on:
+      broker:
+        condition: service_healthy
+    networks:
+      - iot-network
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+networks:
+  iot-network:
+    name: iot-climate-net
+    driver: bridge
