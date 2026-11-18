@@ -1,0 +1,9 @@
+.venv
+__pycache__
+*.pyc
+.env
+tests
+app.py
+generate_mock_data.py
+train_regression_model.py
+README.md

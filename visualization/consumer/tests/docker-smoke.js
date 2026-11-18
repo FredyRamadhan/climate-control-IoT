@@ -68,9 +68,10 @@ async function command(body, expectedStatus = 200) {
 try {
   await mkdir(join(root, '.cache'), { recursive: true });
   // Only speed up health-check scheduling; the image's actual check is preserved.
-  await writeFile(overrideFile, JSON.stringify({ services: { consumer: {
-    healthcheck: { interval: '1s', start_period: '1s' },
-  } } }));
+  await writeFile(overrideFile, JSON.stringify({ services: {
+    consumer: { healthcheck: { interval: '1s', start_period: '1s' } },
+    analytics: { healthcheck: { interval: '1s', start_period: '1s' } },
+  } }));
   started = true;
   docker([...composeArgs, 'up', '--no-build', '--detach', '--wait', '--wait-timeout', '30']);
   container = docker([...composeArgs, 'ps', '--quiet', 'consumer']);
@@ -110,6 +111,57 @@ try {
       error => ['EROFS', 'EACCES'].includes(error.code));
   `]);
   console.log('PASS: API offline behavior, React assets, production-only dependencies, and excluded secrets.');
+
+  const analyticsContainer = docker([...composeArgs, 'ps', '--quiet', 'analytics']);
+  const analyticsInspection = JSON.parse(docker(['inspect', analyticsContainer]))[0];
+  assert.equal(analyticsInspection.Config.User, 'analytics');
+  assert.equal(analyticsInspection.HostConfig.ReadonlyRootfs, true);
+  assert.equal(analyticsInspection.State.Health.Status, 'healthy');
+  assert.equal(Object.keys(analyticsInspection.HostConfig.PortBindings || {}).length, 0);
+  const analytics = await json('/api/analytics/summary');
+  assert.equal(analytics.dataset.rows, 10000);
+  assert.equal(analytics.dataset.source, 'synthetic');
+  assert.equal(analytics.model_ready, true);
+  assert.equal(analytics.hourly.length, 24);
+  assert.equal((await json('/api/analytics/summary?days=1')).dataset.rows, 1440);
+  const simulation = {
+    indoor_temp_c: 28.5, indoor_humidity: 65, outdoor_temp_c: 33, outdoor_humidity: 75,
+    occupancy_count: 3, target_temp_c: 24, hour_of_day: 14, motion_detected: 1,
+    ac_power_state: 1, weather_condition: 'Clouds', fan_speed: 'Medium',
+  };
+  const predictionResponse = await fetch(`${origin}/api/analytics/predict`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(simulation),
+  });
+  assert.equal(predictionResponse.status, 200);
+  const prediction = await predictionResponse.json();
+  assert.ok(Number.isFinite(prediction.power_w) && prediction.power_w >= 0);
+  assert.equal(prediction.features.temp_delta, 4.5);
+  const template = await (await fetch(`${origin}/api/analytics/template.csv`)).text();
+  const batchResponse = await fetch(`${origin}/api/analytics/batch`, {
+    method: 'POST', headers: { 'Content-Type': 'text/csv' }, body: template,
+  });
+  assert.equal(batchResponse.status, 200);
+  const batch = await batchResponse.json();
+  assert.equal(batch.row_count, 1);
+  assert.match(batch.csv, /predicted_power_w/);
+  assert.equal(batch.preview[0].predicted_power_w, prediction.power_w);
+  const invalid = await fetch(`${origin}/api/analytics/predict`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...simulation, target_temp_c: 100 }),
+  });
+  assert.equal(invalid.status, 422);
+  const nonfinite = await fetch(`${origin}/api/analytics/predict`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(simulation).replace('28.5', 'NaN'),
+  });
+  // NaN is not valid JSON, so Express rejects it before it reaches Python.
+  assert.equal(nonfinite.status, 400);
+  console.log('PASS: Python model, summary, period filtering, prediction, CSV inference, and validation work through Express.');
+  docker([...composeArgs, 'stop', '--timeout', '12', 'analytics']);
+  assert.equal((await fetch(`${origin}/api/analytics/summary`)).status, 503);
+  assert.equal((await fetch(`${origin}/health`)).status, 200);
+  docker([...composeArgs, 'start', 'analytics']);
+  await waitFor(async () => (await json('/api/analytics/summary')).model_ready, 'analytics recovery');
+  console.log('PASS: Analytics can stop and recover without disrupting climate control.');
 
   // Stream a fixture into a second Node process in this container, with no mounted
   // secrets or network path to real devices. The fixture is excluded from the image.

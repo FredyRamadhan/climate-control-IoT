@@ -24,6 +24,7 @@ services:
       COMMAND_PUBLISH_TIMEOUT: ${COMMAND_PUBLISH_TIMEOUT:-2}
       STALE_AFTER_SECONDS: ${STALE_AFTER_SECONDS:-30}
       CORS_ORIGIN: ${CORS_ORIGIN:-}
+      ANALYTICS_URL: http://analytics:8001
     extra_hosts:
       - "host.docker.internal:host-gateway"
     read_only: true
@@ -33,6 +34,25 @@ services:
       - no-new-privileges:true
     tmpfs:
       - /tmp:size=16m,noexec,nosuid
+    stop_grace_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+  analytics:
+    build:
+      context: ../analytics
+    image: auto-climate-analytics:latest
+    init: true
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=32m,noexec,nosuid
     stop_grace_period: 15s
     logging:
       driver: json-file

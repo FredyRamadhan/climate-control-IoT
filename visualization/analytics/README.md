@@ -2,6 +2,40 @@
 
 Comprehensive data science and machine learning extension for the **IoT Auto Climate Control Module**.
 
+The main interface is now the **Analitik** tab in the [React dashboard](../consumer/README.md#analytics-tab). It provides summaries, power/temperature trends, model comparison, predictions, and CSV analysis using the existing dataset and trained pipeline. The Streamlit app below remains available as an optional development tool.
+
+## Run the integrated dashboard
+
+```sh
+cd ../consumer
+docker compose up --build -d
+```
+
+Open <http://localhost:8000/#analitik>. Compose runs the analytics adapter privately; the browser uses the Express dashboard's `/api/analytics` endpoints. No separate analytics browser port is needed.
+
+For local development with Python 3.13:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-api.txt
+.\.venv\Scripts\python.exe -m uvicorn api:app --host 127.0.0.1 --port 8001
+```
+
+Use `.venv/bin/python` on Linux/macOS. Start the dashboard separately with `npm run dev` in `../consumer`.
+
+`api.py` is a JSON adapter, not a rewrite of the estimator or training pipeline. It reads the existing files in `data/` and `models/`, caches them until their modification times change, derives `temp_delta`, validates prediction inputs, and limits CSV uploads to 5 MB / 10,000 rows. The API runtime pins scikit-learn 1.9.1 to match the existing model; it refuses incompatible artifacts instead of silently loading them.
+
+| Dashboard endpoint | Purpose |
+| --- | --- |
+| `GET /api/analytics/summary?days=1` | Dataset counts, energy, hourly patterns, occupancy groups, model status, and evaluation; omit `days` for all observations |
+| `POST /api/analytics/predict` | One validated scenario; returns power in watts and normalized features |
+| `POST /api/analytics/batch` | CSV request body with `Content-Type: text/csv`; returns a preview and downloadable CSV content |
+| `GET /api/analytics/template.csv` | Valid single-row input template |
+
+The checked-in dataset contains **10,000 rows**, despite its `100k` filename. Summary counts come from the file itself, and energy uses the observed timestamp interval. Dataset statistics and model estimates are labelled as synthetic; they are not measured electricity usage. Currency and tariff are user-editable estimate inputs. Hardware integration uses the existing room dashboard, and simulation never sends commands to devices.
+
+Run the adapter tests with `.venv\Scripts\python.exe -m unittest discover -s tests -v`.
+
 This module generates high-fidelity synthetic telemetry conforming to the IoT system architecture (`specsheet.md`), trains regression models to predict AC electrical power consumption (Watts), and exposes an interactive Streamlit dashboard for real-time inference and telemetry analytics.
 
 ---

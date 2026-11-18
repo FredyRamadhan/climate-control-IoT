@@ -16,6 +16,8 @@ const environmentSchema = z.object({
   COMMAND_PUBLISH_TIMEOUT: z.coerce.number().min(0.1).max(30).default(2),
   STALE_AFTER_SECONDS: integer(30, 5, 3600),
   CORS_ORIGIN: z.string().default(''),
+  ANALYTICS_URL: z.url().refine((value) => ['http:', 'https:'].includes(new URL(value).protocol),
+    'Use an HTTP or HTTPS analytics URL').default('http://127.0.0.1:8001'),
 });
 
 export function readConfig(environment = process.env) {

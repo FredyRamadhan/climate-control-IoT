@@ -1,0 +1,7 @@
+# Keep the estimator version aligned with the checked-in joblib artifact.
+scikit-learn==1.9.1
+pandas==3.1.1
+numpy==2.5.5
+joblib==1.6.0
+fastapi==0.163.2
+uvicorn==0.54.0

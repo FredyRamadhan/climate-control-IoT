@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { BarChart3 } from 'lucide-react'
+import { AnalyticsPage } from './analytics/AnalyticsPage'
 import { Activity, ArrowUpRight, CircleAlert, CloudRain, CloudSun, Droplets, Fan, House, LayoutDashboard, Lightbulb, MapPin, Moon, Power, Radio, RefreshCw, Settings2, ShieldCheck, SlidersHorizontal, Snowflake, Sun, Thermometer, Users, Wifi, WifiOff, Wind } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Badge } from './components/Badge'
@@ -31,7 +33,20 @@ function SystemStatus({ icon: Icon, title, description, state }: {
 function App() {
   const { data, connection, refreshing, refresh } = useDashboard()
   const { theme, toggleTheme } = useTheme()
-  const [activeNav, setActiveNav] = useState('ringkasan')
+  const [activeNav, setActiveNav] = useState(() => window.location.hash.slice(1) || 'ringkasan')
+  const [analyticsRevision, setAnalyticsRevision] = useState(0)
+  const analyticsActive = activeNav === 'analitik'
+  useEffect(() => {
+    const onHashChange = () => setActiveNav(window.location.hash.slice(1) || 'ringkasan')
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
+  useEffect(() => {
+    document.title = analyticsActive ? 'Analitik energi — AutoClimate' : 'AutoClimate — Kontrol Iklim Ruangan'
+    if (!window.location.hash) return
+    const frame = requestAnimationFrame(() => document.getElementById(activeNav)?.scrollIntoView({ block: 'start' }))
+    return () => cancelAnimationFrame(frame)
+  }, [activeNav, analyticsActive])
   const tx = data?.transmit ?? null
   const rx = data?.receive ?? null
   const weather = data?.weather ?? null
@@ -63,7 +78,12 @@ function App() {
   else if (tx && !sensorValid) alert = 'Pembacaan sensor belum valid. Periksa sensor pada perangkat pengendali.'
 
   return <div className="app-shell">
-    <a className="skip-link" href="#main">Langsung ke konten</a>
+    <a className="skip-link" href="#main" onClick={(event) => {
+      event.preventDefault()
+      const content = document.getElementById('main')
+      content?.focus({ preventScroll: true })
+      content?.scrollIntoView({ block: 'start' })
+    }}>Langsung ke konten</a>
     <aside className="sidebar" aria-label="Navigasi utama">
       <a className="brand" href="#ringkasan" onClick={() => setActiveNav('ringkasan')} aria-label="AutoClimate, ringkasan">
         <span className="brand-mark"><Wind size={25} strokeWidth={2.2} /></span>
@@ -73,6 +93,7 @@ function App() {
       <nav className="navigation">
         {[
           { id: 'ringkasan', label: 'Ringkasan', icon: LayoutDashboard },
+          { id: 'analitik', label: 'Analitik', icon: BarChart3 },
           { id: 'kontrol', label: 'Kontrol manual', icon: SlidersHorizontal },
           { id: 'sistem', label: 'Status perangkat', icon: Radio },
         ].map(({ id, label, icon: Icon }) => <a key={id} href={`#${id}`} aria-label={label}
@@ -90,18 +111,20 @@ function App() {
     </aside>
     <div className="workspace">
       <header className="topbar">
-        <div className="breadcrumb"><House size={16} /><span className="breadcrumb-divider">/</span><span>Ruang utama</span></div>
+        <div className="breadcrumb"><House size={16} /><span className="breadcrumb-divider">/</span><span>{analyticsActive ? 'Analitik energi' : 'Ruang utama'}</span></div>
         <div className="topbar-actions">
           <Badge tone={status.tone} dot>{status.label}</Badge><span className="topbar-divider" />
           <button type="button" className="icon-button" aria-label="Muat ulang data" title="Muat ulang data"
-            disabled={refreshing} onClick={refresh}><RefreshCw size={18} className={refreshing ? 'spin' : ''} /></button>
+            disabled={refreshing} onClick={() => { refresh(); setAnalyticsRevision((value) => value + 1) }}><RefreshCw size={18} className={refreshing ? 'spin' : ''} /></button>
           <button type="button" className="icon-button" aria-label={theme === 'light' ? 'Gunakan tema gelap' : 'Gunakan tema terang'}
             title={theme === 'light' ? 'Tema gelap' : 'Tema terang'} onClick={toggleTheme}>
             {theme === 'light' ? <Moon size={19} /> : <Sun size={19} />}
           </button>
         </div>
       </header>
-      <main id="main" className="main-content">
+      <main id="main" className="main-content" tabIndex={-1}>
+        <div hidden={!analyticsActive}><AnalyticsPage active={analyticsActive} refreshKey={analyticsRevision} dashboard={data} /></div>
+        <div hidden={analyticsActive}>
         <div className="page-heading" id="ringkasan">
           <div><div className="page-context"><span className="context-dot" />Ruang utama</div><h1>Ringkasan ruangan</h1>
             <p>Kenali kondisi ruangan. Atur kenyamanan Anda.</p></div>
@@ -196,7 +219,8 @@ function App() {
               state={receiverOnline ? 'online' : data?.receive_status?.online === false || (rx && !brokerOnline) ? 'offline' : 'unknown'} />
           </div>
         </section>
-        <footer className="page-footer"><span>Auto-Climate Control<span className="footer-separator">/</span>Ruang nyaman, otomatis.</span><span>Cuaca dari OpenWeatherMap</span></footer>
+        </div>
+        <footer className="page-footer"><span>Auto-Climate Control<span className="footer-separator">/</span>Ruang nyaman, otomatis.</span><span>{analyticsActive ? 'Analitik berdasarkan data simulasi' : 'Cuaca dari OpenWeatherMap'}</span></footer>
       </main>
     </div>
   </div>

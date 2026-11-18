@@ -1,6 +1,10 @@
 # Analytics, Machine Learning & Streamlit Hub
 
-This document provides complete documentation for the data science, machine learning, and interactive analytics subsystem located in [visualization/analytics/](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/analytics/).
+The analytics interface is integrated into the main React dashboard as the **Analitik** tab at `/#analitik`. See the [current analytics setup and API guide](../visualization/analytics/README.md) for local and Docker instructions. The scikit-learn model, training scripts, dataset, and optional Streamlit research interface remain in `visualization/analytics/`.
+
+The SPA offers energy summaries, hourly power and temperature patterns, occupancy comparisons, model benchmarks, scenario predictions, and CSV inference. A small Python JSON adapter loads the existing artifacts; Express proxies `/api/analytics/*` on the dashboard's origin. Compose starts both services and keeps the Python service off public host ports. Data is explicitly labelled synthetic, and actual dataset counts are computed rather than inferred from its filename.
+
+The sections below document the underlying generator, training workflow, and optional Streamlit interface.
 
 ---
 

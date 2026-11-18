@@ -6,6 +6,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import { HttpError } from './schemas.js';
 import { resolveTopic } from './topics.js';
+import { analyticsRouter } from './analytics.js';
 
 const defaultClientDirectory = fileURLToPath(new URL('../dist/client', import.meta.url));
 
@@ -38,6 +39,7 @@ export function createApp({ config, store, mqttService, clientDirectory = defaul
     next();
   });
   app.use(express.json({ limit: '16kb' }));
+  app.use('/api/analytics', analyticsRouter({ url: config.ANALYTICS_URL }));
 
   const api = express.Router();
   const noStore = (_req, res, next) => {
@@ -91,11 +93,11 @@ export function createApp({ config, store, mqttService, clientDirectory = defaul
   }
 
   app.use((_req, res) => res.status(404).json({ detail: 'Endpoint not found' }));
-  app.use((error, _req, res, _next) => {
+  app.use((error, req, res, _next) => {
     const status = error.status ?? 500;
     if (status >= 500 && !(error instanceof HttpError)) logger.error(error);
     const detail = error.type === 'entity.parse.failed' ? 'Request body must be valid JSON'
-      : error.type === 'entity.too.large' ? 'Request body exceeds the 16 KB limit'
+      : error.type === 'entity.too.large' ? (req.path.startsWith('/api/analytics/batch') ? 'Ukuran CSV maksimal 5 MB.' : 'Request body exceeds the 16 KB limit')
         : status < 500 || error instanceof HttpError ? error.message : 'Internal server error';
     res.status(status).json({ detail });
   });
