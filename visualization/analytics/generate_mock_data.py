@@ -198,7 +198,7 @@ def generate_climate_mock_data(
     ac_power_consumption_w = np.where(ac_power_state == 1, active_compressor_power, standby_power)
     ac_power_consumption_w = np.round(ac_power_consumption_w, 2)
 
-    # Receiver Relay State mirrors AC Power State with high fidelity (99.8% match)
+    # Decoded AC power state mirror (no physical relay) matches with high fidelity (99.8%)
     relay_state = np.where(rng.random(size=num_rows) < 0.998, ac_power_state, 1 - ac_power_state)
 
     # Compile structured dataframe

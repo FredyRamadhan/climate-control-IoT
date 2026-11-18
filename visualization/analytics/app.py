@@ -297,21 +297,22 @@ def page_executive_overview(df: Optional[pd.DataFrame], config: Dict[str, Any]):
         st.markdown(
             """
             ```text
-            [ ESP8266 Transmitter ]  ── PIR + DHT11 ──> [ MQTT: transmit/data ]
-                     │ (38kHz NEC IR)                            │
-                     ▼                                           ▼
-            [ AC Unit Controller ]                  [ Eclipse Mosquitto Broker ]
-                     ▲                                           │
-                     │ (250 VAC Relay)                           ├─> [ MQTT: receive/ack ]
-            [ ESP8266 Receiver ]    <── VS1838B IR ──────────────┤
-                                                                 │
-            [ OpenWeather API-Producer ] ── Weather ─────────────┴─> [ MQTT: api/weather ]
-                                                                         │
-                                                                         ▼
-                                                            [ FastAPI Consumer Node ]
-                                                                         │
-                                                                         ▼
-                                                       [ Streamlit Analytics & ML ]
+            [ ESP8266 Transmitter ] ── PIR + DHT11 ───────────> [ MQTT: transmit/data ]
+                     │                                                    │
+                     │ 38 kHz NEC IR                                      ▼
+                     ├───────────────────────────┐          [ Eclipse Mosquitto Broker ]
+                     ▼                           ▼                      │
+            [ AC Unit Controller ]   [ ESP8266 Receiver ]              ├─> [ MQTT: receive/state ]
+               (IR input only)          (VS1838B decode,               │
+                                         Fan PWM, status LED)          │
+                                               └───────────────────────┤
+                                                                       │
+            [ OpenWeather API-Producer ] ── Weather ──> [ MQTT: api/weather ] ──┤
+                                                                       ▼
+                                                          [ FastAPI Consumer Node ]
+                                                                       │
+                                                                       ▼
+                                                         [ Streamlit Analytics & ML ]
             ```
             """
         )

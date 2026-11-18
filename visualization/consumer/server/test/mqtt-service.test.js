@@ -44,6 +44,45 @@ test('malformed JSON is discarded, while schema mismatches remain available and 
   assert.equal(store.snapshot().metadata.transmit.schema_valid, false);
   client.message(TOPICS.weather, { main: { temp: 301.15 }, weather: [{ main: 'Rain' }] });
   assert.equal(store.snapshot().weather.main.temp, 301.15);
+  assert.equal(store.snapshot().weather.temp_c, 301.15);
+});
+
+test('weather payloads normalize both flat and nested schemas for producer and dashboard compatibility', () => {
+  const { client, store } = serviceFixture();
+  // 1. Flat schema from api-producer
+  client.message(TOPICS.weather, {
+    city: 'Surakarta',
+    temp_c: 29.4,
+    hum: 72,
+    desc: 'scattered clouds (simulated)',
+    ts: 1763428800,
+  });
+  const flatWeather = store.latest(TOPICS.weather);
+  assert.equal(flatWeather.city, 'Surakarta');
+  assert.equal(flatWeather.name, 'Surakarta');
+  assert.equal(flatWeather.temp_c, 29.4);
+  assert.equal(flatWeather.hum, 72);
+  assert.equal(flatWeather.main.temp, 29.4);
+  assert.equal(flatWeather.main.humidity, 72);
+  assert.equal(flatWeather.desc, 'scattered clouds (simulated)');
+  assert.equal(flatWeather.weather[0].main, 'Clouds');
+
+  // 2. OpenWeatherMap nested schema
+  client.message(TOPICS.weather, {
+    name: 'Surakarta',
+    main: { temp: 31.0, humidity: 68 },
+    weather: [{ main: 'Clear', description: 'clear sky' }],
+    dt: 1763428900,
+  });
+  const nestedWeather = store.latest(TOPICS.weather);
+  assert.equal(nestedWeather.city, 'Surakarta');
+  assert.equal(nestedWeather.name, 'Surakarta');
+  assert.equal(nestedWeather.temp_c, 31.0);
+  assert.equal(nestedWeather.hum, 68);
+  assert.equal(nestedWeather.main.temp, 31.0);
+  assert.equal(nestedWeather.main.humidity, 68);
+  assert.equal(nestedWeather.desc, 'clear sky');
+  assert.equal(nestedWeather.weather[0].main, 'Clear');
 });
 
 test('empty buffers differ from a buffered JSON null, including metadata', () => {

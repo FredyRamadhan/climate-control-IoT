@@ -6,10 +6,16 @@ import { readConfig } from '../config.js';
 test('override preserves false, zero-duration, and all supported fields', () => {
   assert.deepEqual(buildCommand({
     action: 'override', request_id: 'test-override', relay_on: false,
-    target_temp: 16, fan_speed: 'off', duration_s: 0,
+    light_on: true, target_temp: 16, fan_speed: 'off', duration_s: 0,
   }), {
     action: 'override', request_id: 'test-override', relay_on: false,
-    target_temp: 16, fan_speed: 'off', duration_s: 0,
+    light_on: true, target_temp: 16, fan_speed: 'off', duration_s: 0,
+  });
+});
+
+test('lighting relay can be overridden on its own', () => {
+  assert.deepEqual(buildCommand({ action: 'override', request_id: 'light', light_on: false }), {
+    action: 'override', request_id: 'light', light_on: false, duration_s: 60,
   });
 });
 
@@ -37,7 +43,8 @@ const invalid = [
   null, [], {}, { action: 'unknown' }, { action: 'override' },
   { action: 'override', target_temp: 15 }, { action: 'override', target_temp: 31 },
   { action: 'override', target_temp: 24.5 }, { action: 'override', target_temp: '24' },
-  { action: 'override', relay_on: 'false' }, { action: 'override', fan_speed: 'auto' },
+  { action: 'override', relay_on: 'false' }, { action: 'override', light_on: 'true' },
+  { action: 'override', fan_speed: 'auto' },
   { action: 'override', relay_on: true, duration_s: -1 },
   { action: 'override', relay_on: true, duration_s: 86401 },
   { action: 'override', relay_on: true, unexpected: true },

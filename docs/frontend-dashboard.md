@@ -104,7 +104,7 @@ graph TD
     OverviewCol --> ClimatePanel["Climate Panel<br/>• Live Room Temp<br/>• AC Photo & Animated Airflow (IR-commanded AC power)<br/>• Metrics (Target, Fan, Power)"]
     OverviewCol --> SensorGrid["Sensor Grid<br/>• Indoor Humidity<br/>• Motion Occupancy<br/>• Outdoor Weather"]
 
-    ControlCol --> ManualControl["Manual Control Component<br/>• AC Power Toggle (38 kHz IR command)<br/>• Temp Stepper (16-30°C IR setpoint)<br/>• Fan Mode Selector (IR mode)<br/>• Duration Presets<br/>• Auto-Release Button"]
+    ControlCol --> ManualControl["Manual Control Component<br/>• AC Power Toggle (38 kHz IR command)<br/>• Room Lighting Relay Toggle (GPIO12)<br/>• Temp Stepper (16-30°C IR setpoint)<br/>• Fan Mode Selector (IR mode)<br/>• Duration Presets (default: until released)<br/>• Auto-Release Button"]
     ControlCol --> SystemStatus["System Status Panel<br/>• Broker Status<br/>• Transmitter Status<br/>• Receiver Status (decoded IR telemetry)"]
 ```
 
@@ -141,13 +141,19 @@ Provides operator intervention controls:
   - **Tinggi (`high`)**: Maximum cooling throughput.
 
 #### 3. Override Duration Presets
-- Quick preset buttons: **1 Menit (60s)**, **5 Menit (300s)**, **10 Menit (600s)**, **1 Jam (3600s)**, or **Tanpa batas (0s)** for indefinite manual locking.
+- Selectable presets: **Sampai dilepas (0s)** for indefinite manual locking, **1 Menit (60s)**, **5 Menit (300s)**, **15 Menit (900s)**, **1 Jam (3600s)**, plus short **5s/30s** test presets.
+- The default is **Sampai dilepas** so a manual light-off is not reverted by the occupancy rule when a short timer expires. Press **Kembali ke otomatis** to release the override.
 
-#### 4. Optimistic Draft Management
+#### 4. Room Lighting Relay Toggle
+- `light_on` is sent inside the same structured override as AC power, temperature, and fan speed.
+- The switch reflects `transmit.data.light_on`; a successful ACK keeps the selected state until fresh telemetry arrives.
+- Indefinite overrides keep the lamp off until the operator releases manual control.
+
+#### 5. Optimistic Draft Management
 - While the operator is adjusting controls, changes are preserved in a local `draft` state without jumping back to older telemetry values before the command is confirmed by the transmitter.
 - Once the hardware returns a successful ACK, `confirmedAt` is updated and the draft locks until fresh sensor data confirms the change.
 
-#### 5. Return to Automatic Mode ("Kembali ke otomatis")
+#### 6. Return to Automatic Mode ("Kembali ke otomatis")
 - Dispatches `action: "release"`, immediately restoring the autonomous rule engine.
 
 ---

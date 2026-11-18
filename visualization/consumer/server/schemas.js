@@ -20,6 +20,7 @@ const telemetrySchema = z.object({
   timestamp: z.number().int(),
   fan_speed: z.string(),
   relay_on: z.boolean(),
+  light_on: optionalBoolean,
   target_temp: z.number().int(),
   sensor_ok: z.boolean(),
   ir_sent: z.boolean(),
@@ -53,6 +54,7 @@ export const ackSchema = z.object({
   override_remaining_s: optionalInteger,
   applied: z.object({
     relay_on: z.boolean(),
+    light_on: optionalBoolean,
     target_temp: z.number().int(),
     fan_speed: z.string(),
   }).passthrough().nullable().optional(),
@@ -71,6 +73,33 @@ const schemas = new Map([
 ]);
 
 export function normalizePayload(topic, payload) {
+  if (topic === TOPICS.weather && payload && typeof payload === 'object') {
+    const city = payload.city || payload.name || 'Surakarta';
+    const temp = typeof payload.temp_c === 'number' ? payload.temp_c
+      : typeof payload.main?.temp === 'number' ? payload.main.temp : undefined;
+    const hum = typeof payload.hum === 'number' ? payload.hum
+      : typeof payload.main?.humidity === 'number' ? payload.main.humidity : undefined;
+    const desc = payload.desc || payload.weather?.[0]?.description || payload.weather?.[0]?.main || 'Cerah';
+    const weatherMain = payload.weather?.[0]?.main || (desc.toLowerCase().includes('rain') ? 'Rain' : desc.toLowerCase().includes('cloud') ? 'Clouds' : 'Clear');
+    const ts = typeof payload.ts === 'number' ? payload.ts
+      : typeof payload.dt === 'number' ? payload.dt : Math.floor(Date.now() / 1000);
+
+    const normalizedWeather = {
+      ...payload,
+      city,
+      name: city,
+      ...(temp !== undefined ? { temp_c: temp, main: { ...(payload.main || {}), temp, ...(hum !== undefined ? { humidity: hum } : {}) } } : {}),
+      ...(hum !== undefined ? { hum } : {}),
+      desc,
+      weather: payload.weather && Array.isArray(payload.weather) && payload.weather.length > 0
+        ? payload.weather
+        : [{ main: weatherMain, description: desc }],
+      ts,
+      dt: ts,
+    };
+    return { data: normalizedWeather, valid: true };
+  }
+
   const schema = schemas.get(topic);
   if (!schema) return { data: payload, valid: true };
   const result = schema.safeParse(payload);
@@ -85,6 +114,7 @@ const commandSchema = z.object({
   action: z.enum(['override', 'release', 'raw']),
   request_id: z.string().trim().min(1).max(128).nullable().optional(),
   relay_on: optionalBoolean,
+  light_on: optionalBoolean,
   target_temp: optionalInteger,
   fan_speed: optionalString,
   ir_code: optionalString,
@@ -99,17 +129,18 @@ export function buildCommand(body) {
   }
   const req = result.data;
   const requestId = req.request_id || `dash-${Date.now()}-${randomUUID().slice(0, 8)}`;
-  const hasControl = ['relay_on', 'target_temp', 'fan_speed'].some((field) => req[field] != null);
+  const hasControl = ['relay_on', 'light_on', 'target_temp', 'fan_speed']
+    .some((field) => req[field] != null);
 
   if (req.action === 'release') {
     if (hasControl || req.ir_code != null) {
-      throw new HttpError(422, 'release does not accept relay/temp/fan/ir_code fields');
+      throw new HttpError(422, 'release does not accept relay/light/temp/fan/ir_code fields');
     }
     return { action: 'release', request_id: requestId };
   }
 
   if (req.action === 'raw') {
-    if (hasControl) throw new HttpError(422, 'relay/temp/fan cannot be combined with a raw frame');
+    if (hasControl) throw new HttpError(422, 'relay/light/temp/fan cannot be combined with a raw frame');
     const code = (req.ir_code ?? '').trim().replace(/^0x/i, '');
     if (!/^[0-9a-f]{1,8}$/i.test(code)) {
       throw new HttpError(422, 'ir_code must contain 1-8 hexadecimal digits');
@@ -123,7 +154,7 @@ export function buildCommand(body) {
   }
 
   if (req.ir_code != null) throw new HttpError(422, 'ir_code only applies to the raw action');
-  if (!hasControl) throw new HttpError(422, 'override requires at least one of relay_on, target_temp, fan_speed');
+  if (!hasControl) throw new HttpError(422, 'override requires at least one of relay_on, light_on, target_temp, fan_speed');
   if (req.target_temp != null && (req.target_temp < 16 || req.target_temp > 30)) {
     throw new HttpError(422, 'target_temp must be between 16 and 30 Celsius');
   }
@@ -135,7 +166,7 @@ export function buildCommand(body) {
     action: 'override',
     duration_s: req.duration_s,
     request_id: requestId,
-    ...Object.fromEntries(['relay_on', 'target_temp', 'fan_speed']
+    ...Object.fromEntries(['relay_on', 'light_on', 'target_temp', 'fan_speed']
       .filter((field) => req[field] != null).map((field) => [field, req[field]])),
   };
 }

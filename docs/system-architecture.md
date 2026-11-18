@@ -56,7 +56,7 @@ graph TB
 
 #### 2. Receiver Node (`board/receive-node`)
 - **Microcontroller:** Espressif ESP8266 (NodeMCU v2 / D1 Mini).
-- **Core Role:** Acts as an AC feedback receiver and blower motor simulator. In real-world operation, the physical air conditioning unit is controlled exclusively by the 38 kHz NEC IR signal emitted from the Transmitter Node. AC power (ON/OFF) is commanded entirely via IR signals without cutting off mains power. Physical relays are never used to switch AC power, avoiding compressor electrical damage; relays in this project are strictly reserved for room lighting.
+- **Core Role:** Acts as an AC feedback receiver and blower motor simulator. In real-world operation, the physical air conditioning unit is controlled exclusively by the 38 kHz NEC IR signal emitted from the Transmitter Node. AC power (ON/OFF) is commanded entirely via IR signals without cutting off mains power. Physical relays are never used to switch AC power, avoiding compressor electrical damage; the only relay in this project is the transmitter's room-lighting relay. The receiver has no relay output: it drives only the blower PWM and a status LED, and publishes the decoded state over MQTT.
 - **Signal Decoding:** Utilizes a VS1838B IR demodulator to capture and validate 32-bit NEC-compatible frames. Verifies the custom protocol header (`0xA1`), bit inversion, and 5-bit XOR checksum.
 - **Actuation & Simulation:** Drives an NPN transistor (2N2222) via 1 kHz PWM to simulate cooling fan speeds across 4 duty cycle stages (Off: 0%, Low: 33%, Medium: 67%, High: 100%) and mirrors power status on indicator LEDs.
 - **Telemetry:** Publishes state transitions and regular heartbeats to `receive/state`.

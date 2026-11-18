@@ -51,7 +51,8 @@ Source sketch: [receive-node.ino](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/
 | **D5** | `GPIO14` | VS1838B IR Demodulator OUT | `INPUT` | Receives demodulated 38 kHz NEC pulses. |
 | **D7** | `GPIO13` | AC Power Status LED | `OUTPUT` | State indicator mirroring decoded AC power (`HIGH` = AC ON). |
 | **D1** | `GPIO5` | 2N2222 Base (DC Fan PWM) | `OUTPUT` | 1 kHz analogWrite PWM (duty cycle 0..1023) for blower simulation. |
-| **D6** | `GPIO12` | Bench Test Output | `OUTPUT` | Diagnostic bench load (mirrors decoded AC power state). |
+
+> The receiver has **no relay output** and does not use D6/GPIO12. It decodes the AC state from IR, drives only the blower PWM and status LED, and reports the decoded state over MQTT.
 
 ```text
                +-------------------+
@@ -72,10 +73,13 @@ VS1838B (D5) ->| GPIO14      GPIO5 |---> 2N2222 Fan PWM (D1)
 ### 3.1 Room Lighting Relay Configuration
 The Lightbulb Relay on the Transmitter Node utilizes an opto-isolated relay module:
 - **Active-LOW Logic:** Setting `GPIO12` to `LOW` completes the circuit through the internal optocoupler photodiode, triggering the output triac/transistor to close the relay contacts and turn on the light.
+- **Polarity override:** `LIGHT_RELAY_ACTIVE_LOW` defaults to `true` in the sketch and can be overridden in `secrets.h`. If the lamp stays ON after a light-off command, or is ON at boot before motion, the module is likely active-HIGH or wired through the relay's NC contact; set the flag to `false` or move the lamp to the NO terminal.
 - **Transmitter Light Relay Code:**
   ```cpp
   #define PIN_LIGHT_RELAY 12
+  #ifndef LIGHT_RELAY_ACTIVE_LOW
   #define LIGHT_RELAY_ACTIVE_LOW true
+  #endif
 
   void setLightRelay(bool state) {
     lightRelayOn = state;
@@ -105,7 +109,7 @@ To guarantee that fast, transient human motion is never missed due to slow netwo
 
 1. **Fast PIR Polling (Every 100 ms):**
    - Reads `digitalRead(PIN_PIR)`.
-   - If `HIGH`: immediately lights indicator LED (`GPIO16`), marks `motionSinceLastSample = true`, updates `lastMotionMs = millis()`, and turns on the light relay if the room was dark.
+   - If `HIGH`: immediately lights indicator LED (`GPIO16`), marks `motionSinceLastSample = true`, updates `lastMotionMs = millis()`, and turns on the light relay when no manual override is active.
 2. **Network Maintenance (Every Loop Iteration):**
    - Calls `maintainWifi()`, `maintainMqtt()`, `mqttClient.loop()`.
    - Executes `processPendingCommand()` to service incoming overrides.
@@ -142,12 +146,12 @@ flowchart TD
     PwrOn --> EvalLight
     PwrOff --> EvalLight
 
-    EvalLight --> LightCheck{"Motion within 2h?<br/>(recent2h)"}
-    LightCheck -- Yes --> LightOn["Set Lighting Relay = ON"]
-    LightCheck -- No --> LightOff["Set Lighting Relay = OFF (2h idle)"]
+    EvalLight --> LightCheck{"No motion for 2h?<br/>(!recent2h)"}
+    LightCheck -- Yes --> LightOff["Set Lighting Relay = OFF (2h idle)"]
+    LightCheck -- No --> KeepLight["Keep current light state"]
 
-    LightOn --> EvalTemp["Evaluate Cooling Setpoint"]
-    LightOff --> EvalTemp
+    LightOff --> EvalTemp["Evaluate Cooling Setpoint"]
+    KeepLight --> EvalTemp
 
     EvalTemp --> TempCheck1{"recent10 == true &<br/>temp < 24°C?"}
     TempCheck1 -- Yes --> Rule2["Rule 2: Maintain Current Setpoint<br/>(Grace window priority)"]
@@ -186,9 +190,10 @@ flowchart TD
 | **Rule 3** | `recent5 == true && tempC > 24.0` | `targetTempC = 21` | Dispatches aggressive cooling while room is hot and occupied. |
 | **Rule 4** | `!recent5 && tempC < 24.0` | `targetTempC = 24` | Resets target to mild baseline once occupants have departed. |
 | **Rule 5** | `!recent10` (no motion for 10 min) | `relayOn = false` | Automatically shuts off AC when room is vacated. |
+| **Light Rule** | PIR motion detected (fast 100 ms poll) | `lightRelayOn = true` | Turns the lamp on immediately when someone enters. |
+| **Light Idle Rule** | `!recent2h` | `lightRelayOn = false` | Turns the lamp off after 2 hours without motion. A manual light-off is not undone by stale motion history. |
 | **Rule 6** | `relayOn && recent5 && hum < 50%` | `fanSpeed = FAN_OFF` | Disables fan when air is already dry. |
 | **Rule 7** | `relayOn && recent5 && hum >= 50%` | `fanSpeed = FAN_HIGH`| Engages high blower speed to accelerate convective heat exchange. |
-| **Light Rule** | `recent2h == true` / `!recent2h` | `lightRelayOn = true/false` | Keeps room light on during presence; shuts off after 2h idle. |
 
 ---
 

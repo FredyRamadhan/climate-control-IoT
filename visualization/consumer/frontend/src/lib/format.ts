@@ -46,8 +46,17 @@ const weatherLabels: Record<string, string> = {
 }
 
 export function weatherLabel(condition: unknown): string {
-  if (typeof condition !== 'string' || !condition) return 'Menunggu data cuaca'
-  return weatherLabels[condition.toLowerCase()] || condition
+  if (typeof condition !== 'string' || !condition.trim()) return 'Menunggu data cuaca'
+  const text = condition.trim().toLowerCase()
+  if (weatherLabels[text]) return weatherLabels[text]
+  if (/thunder|storm|petir|badai/i.test(text)) return 'Badai petir'
+  if (/drizzle|gerimis/i.test(text)) return 'Gerimis'
+  if (/rain|hujan/i.test(text)) return 'Hujan'
+  if (/cloud|awan|mendung/i.test(text)) return 'Berawan'
+  if (/clear|cerah|sun/i.test(text)) return 'Cerah'
+  if (/snow|salju/i.test(text)) return 'Salju'
+  if (/mist|fog|haze|kabut/i.test(text)) return 'Berkabut'
+  return condition
 }
 
 export function celsius(value: unknown): number | undefined {

@@ -2,7 +2,7 @@
 
 An Express 5 backend and React + TypeScript frontend for the IoT climate controller. MQTT topics and the original REST endpoints remain compatible with the transmitter, receiver, and existing scripts. Room monitoring and controls run on Node; the Analitik tab reuses the Python analytics model through a small JSON adapter.
 
-The Indonesian dashboard shows room temperature, humidity, motion, outside weather, AC state, and device connectivity. Manual controls support AC power, a 16–30°C setpoint, four fan speeds, timed overrides, indefinite overrides, and a return to automatic control. Light and dark themes use locally hosted fonts. Readings are never seeded with demo values; the lamp remains unavailable because the firmware does not expose lamp control.
+The Indonesian dashboard shows room temperature, humidity, motion, outside weather, AC state, lighting relay state, and device connectivity. Manual controls support AC power, the room-lighting relay, a 16–30°C setpoint, four fan speeds, timed overrides, indefinite overrides, and a return to automatic control. Light and dark themes use locally hosted fonts. Readings are never seeded with demo values; weather is sourced from OpenWeatherMap through the API producer.
 
 ## Development
 

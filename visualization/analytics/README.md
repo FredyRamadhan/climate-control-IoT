@@ -78,7 +78,7 @@ The dataset adheres to the physical specifications of an Inverter Air Conditioni
 | `target_temp_c` | Int | °C | NEC IR climate target setpoint (16°C - 30°C) |
 | `temp_delta` | Float | °C | Cooling demand: `indoor_temp_c - target_temp_c` |
 | `fan_speed` | String | Categorical | Fan mode: Low, Medium, High, Auto, Off |
-| `relay_state` | Int | 0 / 1 | 250 VAC Relay state (VS1838B ACK) |
+| `relay_state` | Int | 0 / 1 | Decoded AC power state mirror (VS1838B IR ACK; no physical relay) |
 | `ac_power_state` | Int | 0 / 1 | AC operational state: 1 (Active), 0 (Standby) |
 | **`ac_power_consumption_w`** | Float | **Watts** | **Regression Target**: Real-time AC electrical load |
 
