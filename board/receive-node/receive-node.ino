@@ -10,13 +10,11 @@
 // ==========================================
 // Hardware Pin Mapping (NodeMCU v2 / D1 mini)
 // ==========================================
+// This node has no relay output. It only decodes IR, drives the blower PWM,
+// lights a local AC-power status LED, and publishes state over MQTT.
 #define PIN_IR_RECV   14  // D5 (GPIO14) - VS1838B IR receiver OUT
-#define PIN_RELAY     12  // D6 (GPIO12) - 250 VAC opto-isolated relay IN
-#define PIN_LED       13  // D7 (GPIO13) - Status LED (mirrors relay state)
+#define PIN_LED       13  // D7 (GPIO13) - AC power status LED
 #define PIN_FAN       5   // D1 (GPIO5)  - 2N2222 NPN transistor Base (PWM speed control)
-
-// Most opto-isolated relay boards are active-LOW. Set false for active-HIGH.
-#define RELAY_ACTIVE_LOW true
 
 // Fan PWM Duty Cycle values (0..1023 on ESP8266)
 #define FAN_PWM_OFF   0
@@ -80,7 +78,6 @@ FanSpeed fanSpeed = FAN_OFF;
 uint16_t fanPwm = FAN_PWM_OFF;
 bool stateValid = false;
 
-bool relayState = false;
 unsigned long lastStatePublishMs = 0;
 unsigned long lastWifiAttemptMs = 0;
 unsigned long lastMqttAttemptMs = 0;
@@ -99,21 +96,8 @@ uint32_t getTimestamp() {
   return (now > 1700000000) ? (uint32_t)now : 0;
 }
 
-void setRelay(bool state) {
-  bool changed = (state != relayState);
-
-  relayState = state;
-  if (RELAY_ACTIVE_LOW) {
-    digitalWrite(PIN_RELAY, state ? LOW : HIGH);
-  } else {
-    digitalWrite(PIN_RELAY, state ? HIGH : LOW);
-  }
+void setPowerIndicator(bool state) {
   digitalWrite(PIN_LED, state ? HIGH : LOW);
-
-  if (changed) {
-    Serial.print("[Relay] ");
-    Serial.println(state ? "ON" : "OFF");
-  }
 }
 
 void setFanSpeed(FanSpeed speed) {
@@ -134,7 +118,8 @@ void setFanSpeed(FanSpeed speed) {
       break;
   }
 
-  bool changed = (fanPwm != pwm);
+  bool changed = (fanPwm != pwm) || (fanSpeed != speed);
+  fanSpeed = speed;
   fanPwm = pwm;
   analogWrite(PIN_FAN, pwm);
 
@@ -207,7 +192,7 @@ void publishState(const char* source) {
   }
 
   bool published = mqttClient.publish(MQTT_TOPIC_STATE, jsonBuffer, true);
-  lastStatePublishMs = millis();
+  if (published) lastStatePublishMs = millis();
 
   Serial.print("[MQTT] ");
   Serial.print(MQTT_TOPIC_STATE);
@@ -223,11 +208,10 @@ void applyDecodedState(bool powerOn, uint8_t tempC, FanSpeed fan) {
 
   acPowerState = powerOn;
   targetTempC = tempC;
-  fanSpeed = fan;
   stateValid = true;
 
-  setRelay(acPowerState);
-  setFanSpeed(fanSpeed);
+  setPowerIndicator(acPowerState);
+  setFanSpeed(fan);
 
   Serial.print("[AC] power=");
   Serial.print(acPowerState ? "on" : "off");
@@ -246,6 +230,8 @@ void setupWifi() {
   WiFi.mode(WIFI_STA);
   WiFi.persistent(false);
   WiFi.setAutoReconnect(true);
+  // Keep the modem awake so MQTT keepalive pings are not delayed.
+  WiFi.setSleepMode(WIFI_NONE_SLEEP);
   WiFi.hostname("climate-receive");
 
   Serial.print("[WiFi] Connecting to: ");
@@ -266,7 +252,8 @@ void maintainWifi() {
 
   Serial.print("[WiFi] Reconnecting to: ");
   Serial.println(WIFI_SSID);
-  WiFi.disconnect();
+  // Do not call WiFi.disconnect() here: it aborts an association that may
+  // still be in progress on a weak signal. Just restart the attempt.
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 }
 
@@ -315,11 +302,10 @@ void setup() {
   delay(100);
 
   Serial.println();
-  Serial.println("--- IoT Climate Control: Receiver / AC Emulator ---");
+  Serial.println("--- IoT Climate Control: Receiver / AC Feedback + Blower ---");
 
-  pinMode(PIN_RELAY, OUTPUT);
   pinMode(PIN_LED, OUTPUT);
-  setRelay(false);
+  setPowerIndicator(false);
 
   pinMode(PIN_FAN, OUTPUT);
   analogWriteRange(1023);
