@@ -1,6 +1,6 @@
 # Frontend Web Application & User Interface
 
-This document specifies the architecture, state management, components, themes, and design patterns of the **AutoClimate Dashboard** web application located in [visualization/consumer/frontend/](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/frontend/).
+This document specifies the architecture, state management, components, themes, and design patterns of the **AutoClimate Dashboard** web application located in [visualization/consumer/frontend/](../visualization/consumer/frontend/).
 
 ---
 
@@ -10,7 +10,7 @@ This document specifies the architecture, state management, components, themes, 
 - **Build Tool:** Vite 6 with `@vitejs/plugin-react`.
 - **Icons:** Lucide React (`lucide-react`).
 - **Typography:** Self-hosted **Source Sans 3** font files (`400`, `500`, `600`, `700` weights) in modern WOFF2 format located in `public/fonts/`. No external Google Fonts CDN requests are made, enabling seamless offline LAN operation.
-- **Styling Architecture:** Pure modular CSS ([App.css](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/frontend/src/App.css), [index.css](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/frontend/src/index.css)) utilizing CSS Custom Properties for dynamic theme variables. No heavy utility frameworks (e.g. Tailwind or Bootstrap) are used, ensuring a lightweight asset footprint.
+- **Styling Architecture:** Pure modular CSS ([App.css](../visualization/consumer/frontend/src/App.css), [index.css](../visualization/consumer/frontend/src/index.css)) utilizing CSS Custom Properties for dynamic theme variables. No heavy utility frameworks (e.g. Tailwind or Bootstrap) are used, ensuring a lightweight asset footprint.
 - **Localization:** 100% native Indonesian language interface designed for Indonesian climate monitoring contexts.
 
 ---
@@ -48,7 +48,7 @@ visualization/consumer/frontend/
 ## 3. State Management & Custom Hooks
 
 ### 3.1 `useDashboard` (Real-Time Telemetry Polling)
-Source: [useDashboard.ts](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/frontend/src/hooks/useDashboard.ts)
+Source: [useDashboard.ts](../visualization/consumer/frontend/src/hooks/useDashboard.ts)
 
 The `useDashboard` hook encapsulates network communication between the frontend and the Express REST API:
 - **Polling Cadence:** Automatically fetches `/api/dashboard` every 3,000 ms (`POLL_INTERVAL_MS = 3000`).
@@ -71,7 +71,7 @@ export function useDashboard(): {
 ---
 
 ### 3.2 `useTheme` (Light/Dark Mode Engine)
-Source: [useTheme.ts](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/frontend/src/hooks/useTheme.ts)
+Source: [useTheme.ts](../visualization/consumer/frontend/src/hooks/useTheme.ts)
 
 Provides instant light/dark theme switching:
 - **Persistence:** Stores user choice in `localStorage.getItem('theme')`.
@@ -113,7 +113,7 @@ graph TD
 ## 5. Component Deep Dive
 
 ### 5.1 Climate Scene & Airflow Animation
-Source: [App.tsx](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/frontend/src/App.tsx#L121-L135)
+Source: [App.tsx](../visualization/consumer/frontend/src/App.tsx#L121-L135)
 - **Live Room Temperature:** Displays the DHT11 reading with a glowing pulsing green dot when live, or a muted grey dot when offline.
 - **AC Appliance Visual:** Integrates an authentic photograph of the room's AC unit (`/images/ac-photo.png`).
 - **Dynamic Airflow Animation:** When `tx.relay_on === true`, five distinct horizontal wave streams animate downward across the unit using pure CSS `@keyframes airflow`:
@@ -126,7 +126,7 @@ Source: [App.tsx](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/co
   ```
 
 ### 5.2 Manual Control Interface
-Source: [ManualControl.tsx](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/frontend/src/components/ManualControl.tsx)
+Source: [ManualControl.tsx](../visualization/consumer/frontend/src/components/ManualControl.tsx)
 
 Provides operator intervention controls:
 
@@ -160,7 +160,7 @@ Provides operator intervention controls:
 
 ## 6. Localization & Formatting Utilities
 
-Source: [format.ts](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/frontend/src/lib/format.ts)
+Source: [format.ts](../visualization/consumer/frontend/src/lib/format.ts)
 
 All presentation values are formatted according to Indonesian cultural standards:
 - **Temperature Display:** `celsius(24.5)` -> `"24,5 °C"`.
@@ -193,7 +193,7 @@ All presentation values are formatted according to Indonesian cultural standards
 cd visualization/consumer
 npm run dev:client
 ```
-The Vite development server launches at `http://localhost:5173`. API calls to `/api` are automatically proxied to the Express backend running on port 8000 via [vite.config.ts](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/frontend/vite.config.ts):
+The Vite development server launches at `http://localhost:5173`. API calls to `/api` are automatically proxied to the Express backend running on port 8000 via [vite.config.ts](../visualization/consumer/frontend/vite.config.ts):
 
 ```typescript
 export default defineConfig({

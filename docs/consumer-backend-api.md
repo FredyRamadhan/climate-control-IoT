@@ -1,6 +1,6 @@
 # Consumer Backend & REST API Specification
 
-This document provides complete technical specifications for the **Consumer Node** backend service located in [visualization/consumer/server/](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/server/). The service is built with **Node.js (>= 22.12)** and **Express 5**, providing real-time MQTT telemetry ingestion, in-memory sliding ring buffering, synchronous command-to-ACK correlation, and a comprehensive REST API.
+This document provides complete technical specifications for the **Consumer Node** backend service located in [visualization/consumer/server/](../visualization/consumer/server/). The service is built with **Node.js (>= 22.12)** and **Express 5**, providing real-time MQTT telemetry ingestion, in-memory sliding ring buffering, synchronous command-to-ACK correlation, and a comprehensive REST API.
 
 ---
 
@@ -20,12 +20,12 @@ graph LR
 ```
 
 ### Module Responsibilities
-- **[config.js](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/server/config.js):** Validates and coerces all environment variables using Zod schemas at startup. Crashes early if parameters are out of range.
-- **[topics.js](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/server/topics.js):** Declares canonical topic strings, subscription lists, and an alias resolver mapping human queries (`"transmit"`, `"receive"`, `"weather"`, `"command"`, `"receive/ack"`) to their exact MQTT topic paths.
-- **[schemas.js](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/server/schemas.js):** Defines runtime Zod validation schemas for incoming MQTT payloads, normalizes JSON data, and validates command request bodies.
-- **[store.js](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/server/store.js):** Maintains in-memory FIFO ring buffers (max 100 entries per topic) and stores per-topic arrival metadata (`received_at`, `schema_valid`, `retained`).
-- **[mqtt-service.js](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/server/mqtt-service.js):** Manages the Paho/MQTT.js client lifecycle, handles automatic reconnects, and coordinates the synchronous command dispatch and ACK correlation pipeline.
-- **[app.js](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/server/app.js):** Instantiates the Express 5 router, Helmet security policies, CORS handling, compression, and error middleware.
+- **[config.js](../visualization/consumer/server/config.js):** Validates and coerces all environment variables using Zod schemas at startup. Crashes early if parameters are out of range.
+- **[topics.js](../visualization/consumer/server/topics.js):** Declares canonical topic strings, subscription lists, and an alias resolver mapping human queries (`"transmit"`, `"receive"`, `"weather"`, `"command"`, `"receive/ack"`) to their exact MQTT topic paths.
+- **[schemas.js](../visualization/consumer/server/schemas.js):** Defines runtime Zod validation schemas for incoming MQTT payloads, normalizes JSON data, and validates command request bodies.
+- **[store.js](../visualization/consumer/server/store.js):** Maintains in-memory FIFO ring buffers (max 100 entries per topic) and stores per-topic arrival metadata (`received_at`, `schema_valid`, `retained`).
+- **[mqtt-service.js](../visualization/consumer/server/mqtt-service.js):** Manages the Paho/MQTT.js client lifecycle, handles automatic reconnects, and coordinates the synchronous command dispatch and ACK correlation pipeline.
+- **[app.js](../visualization/consumer/server/app.js):** Instantiates the Express 5 router, Helmet security policies, CORS handling, compression, and error middleware.
 
 ---
 
@@ -352,7 +352,7 @@ All errors return a standard JSON object containing a `detail` string:
 
 ## 4. In-Memory Store & Freshness Engine
 
-Source: [store.js](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/server/store.js)
+Source: [store.js](../visualization/consumer/server/store.js)
 
 ### Sliding Ring Buffer Mechanics
 1. **FIFO Ingestion:** When a message arrives on an active topic, `store.record(topic, payload)` normalizes the data against the topic's Zod schema.
@@ -363,7 +363,7 @@ Source: [store.js](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/c
 
 ## 5. Synchronous Command-ACK Pipeline
 
-Source: [mqtt-service.js](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/server/mqtt-service.js)
+Source: [mqtt-service.js](../visualization/consumer/server/mqtt-service.js)
 
 ```mermaid
 sequenceDiagram
@@ -381,7 +381,7 @@ sequenceDiagram
     Service->>Map: Register request_id -> {acknowledge(), fail()}
     Service->>Broker: MQTT PUBLISH transmit/command (QoS 1)
     Broker->>Node: Forward transmit/command
-    Note over Node,AC: AC power / 16-30°C setpoint / fan are commanded only via 38 kHz NEC IR.<br/>The GPIO12 relay is lighting-only; AC is never mains-switched.
+    Note over Node,AC: AC power / 16-30°C setpoint / fan are commanded only via 38 kHz NEC IR.<br/>The GPIO12 relay is lighting-only. AC is never mains-switched.
     Node->>Node: Apply state & lighting relay (light_on) if supplied
     Node->>AC: Emit 38 kHz NEC IR frame (KY-005)
     Node->>RX: Same IR frame for feedback decoding

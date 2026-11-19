@@ -32,11 +32,11 @@ graph TB
         Tools["Operator CLI Utilities<br/>• ir_override.py<br/>• debug_broker.py<br/>• e2e_integration_test.py"]
     end
 
-    TX -->|38 kHz NEC IR: AC power, setpoint, fan (direct to AC, no mains relay)| AC
+    TX -->|"38 kHz NEC IR: AC power, setpoint, fan (direct to AC, no mains relay)"| AC
     TX -->|Same IR frames decoded for AC feedback| RX
     RX -->|GPIO5 1 kHz PWM via 2N2222| Fan
     TX <-->|MQTT: transmit/data, transmit/status, transmit/command, transmit/command/ack| Broker
-    RX <-->|MQTT: receive/state (decoded IR), receive/status| Broker
+    RX <-->|"MQTT: receive/state (decoded IR), receive/status"| Broker
     Producer -->|MQTT: api/weather| Broker
     Broker <-->|MQTT Ingest & Command Dispatch| Consumer
     Consumer <-->|HTTP REST /api| Dashboard
@@ -117,7 +117,7 @@ sequenceDiagram
     participant C as Consumer Backend
     participant UI as React Dashboard
 
-    Note over S,TX: Every 100 ms PIR poll; Every 5000 ms DHT11 sample
+    Note over S,TX: Every 100 ms PIR poll, every 5000 ms DHT11 sample
     S->>TX: Motion Detected (HIGH) & DHT11 (29.5°C, 65% RH)
     TX->>TX: Evaluate Rule 1: Motion == true & Temp > 28°C<br/>-> AC Power (IR) = ON, Target = 16°C, Fan = HIGH
     TX->>TX: Turn ON Lighting Relay (GPIO12) — lighting only
@@ -168,7 +168,7 @@ sequenceDiagram
     TX->>AC: 38 kHz NEC IR from KY-005 (no mains relay switched)
     TX->>RX: Same IR frame decoded for feedback
     RX->>RX: Apply decoded state: AC Power ON, 22°C, Fan Medium (PWM 682)
-    RX->>RX: Update AC state LED; drive blower via 1 kHz PWM
+    RX->>RX: Update AC state LED and drive blower via 1 kHz PWM
     RX->>M: Publish receive/state (source: "ir-change", decoded IR state)
 
     TX->>M: Publish transmit/command/ack {ok: true, request_id: "dash-...", applied: {...}}
@@ -187,7 +187,7 @@ sequenceDiagram
     participant TX as Transmitter Node
     participant Light as Lighting Relay (GPIO12)
 
-    Note over TX,Light: GPIO12 is the ONLY relay. It switches room lighting; AC power is never mains-switched and stays IR-driven.
+    Note over TX,Light: GPIO12 is the ONLY relay. It switches room lighting. AC power is never mains-switched and stays IR-driven.
     Note over TX: Normal room occupancy
     PIR->>TX: Motion detected
     TX->>TX: Update lastMotionMs = millis()
@@ -200,7 +200,7 @@ sequenceDiagram
     Note over TX: 2 hours elapsed without motion
     TX->>Light: De-energize Lighting Relay (Set HIGH)
     TX->>TX: Log: [Relay] Light bulb OFF
-    Note over TX,Light: Lighting timeout does not affect AC power; AC commands continue over 38 kHz IR.
+    Note over TX,Light: Lighting timeout does not affect AC power. AC commands continue over 38 kHz IR.
 ```
 
 ---
@@ -219,7 +219,7 @@ sequenceDiagram
    - The password file is owned by UID `1883:1883` with strict file permissions (`0700`).
 
 ### 4.2 Container & Process Hardening
-The Consumer backend Docker container is built with production security best practices defined in [compose.yaml](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/compose.yaml):
+The Consumer backend Docker container is built with production security best practices defined in [compose.yaml](../visualization/consumer/compose.yaml):
 - **Unprivileged User:** Executes under the non-root `node` system user (UID 1000).
 - **Read-Only Root Filesystem:** Root filesystem is mounted read-only (`read_only: true`).
 - **Capability Dropping:** All Linux capabilities are dropped (`cap_drop: - ALL`).
@@ -228,7 +228,7 @@ The Consumer backend Docker container is built with production security best pra
 - **Graceful Termination:** Configured with `stop_grace_period: 15s` and an init process (`init: true`) to gracefully drain MQTT commands and complete active HTTP connections.
 
 ### 4.3 Web Security Headers & Defenses
-The Express 5 application implements comprehensive defenses in [app.js](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/server/app.js):
+The Express 5 application implements comprehensive defenses in [app.js](../visualization/consumer/server/app.js):
 - **Helmet Middleware:** Disables `x-powered-by`, enforces strict `Content-Security-Policy` permitting only local scripts and styles, and allows data URIs for images.
 - **Payload Limits:** Incoming JSON request bodies are capped at 16 KB (`express.json({ limit: '16kb' })`) to prevent memory exhaustion attacks.
 - **CORS Protection:** Configurable CORS filter (`CORS_ORIGIN`). By default, same-origin access is required.

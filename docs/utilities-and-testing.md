@@ -6,14 +6,14 @@ This document provides complete technical specifications for the auxiliary tools
 
 ## 1. OpenWeatherMap API-Producer Node
 
-Source directory: [utils/api-producer/](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/utils/api-producer/)  
-Main script: [main.py](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/utils/api-producer/main.py)
+Source directory: [utils/api-producer/](../utils/api-producer/)  
+Main script: [main.py](../utils/api-producer/main.py)
 
 The **API-Producer** is an autonomous Python daemon that fetches real-time external weather metrics and broadcasts them to the MQTT message bus.
 
 ```mermaid
 flowchart LR
-    OWM["OpenWeatherMap API<br/>(api.openweathermap.org)"] -->|HTTPS GET (Units: Metric)| Producer["API-Producer (Python)<br/><code>utils/api-producer/main.py</code>"]
+    OWM["OpenWeatherMap API<br/>(api.openweathermap.org)"] -->|"HTTPS GET (Units: Metric)"| Producer["API-Producer (Python)<br/><code>utils/api-producer/main.py</code>"]
     Fallback["Realistic Fallback<br/>Generator"] -.->|On Network / Auth Failure| Producer
     Producer -->|MQTT PUBLISH api/weather<br/>QoS 1, retain=true| Mosquitto["Mosquitto Broker"]
 ```
@@ -50,7 +50,7 @@ python main.py --once
 
 ## 2. Infrared Manual Override CLI (`ir_override.py`)
 
-Source script: [ir_override.py](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/utils/tools/ir_override.py)
+Source script: [ir_override.py](../utils/tools/ir_override.py)
 
 A standalone command-line tool allowing system administrators and engineers to directly command the climate control system over MQTT without opening a web browser.
 
@@ -103,7 +103,7 @@ usage: ir_override.py [-h] [--host HOST] [--port PORT] [--username USERNAME]
 
 ## 3. End-to-End System Verification Suite (`e2e_integration_test.py`)
 
-Source script: [e2e_integration_test.py](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/scripts/e2e_integration_test.py)
+Source script: [e2e_integration_test.py](../scripts/e2e_integration_test.py)
 
 A system verification test that runs an end-to-end integration check across all tiers of the architecture without requiring physical ESP8266 hardware.
 
@@ -145,7 +145,7 @@ python3 scripts/e2e_integration_test.py
 
 ## 4. Consumer Node Automated Test Suites
 
-The Consumer Node includes extensive unit, integration, and UI testing suites located in [visualization/consumer/server/test/](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/server/test/) and [visualization/consumer/tests/](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/tests/).
+The Consumer Node includes extensive unit, integration, and UI testing suites located in [visualization/consumer/server/test/](../visualization/consumer/server/test/) and [visualization/consumer/tests/](../visualization/consumer/tests/).
 
 ### 4.1 Native Node.js Unit & Integration Tests
 Uses Node's built-in test runner (`node --test`). No external test frameworks (e.g. Jest or Mocha) are required.
@@ -166,7 +166,7 @@ npm test
 ---
 
 ### 4.2 Playwright End-to-End Browser UI Tests
-Source: [tests/dashboard.spec.js](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/tests/dashboard.spec.js)
+Source: [tests/dashboard.spec.js](../visualization/consumer/tests/dashboard.spec.js)
 
 Runs headless browser tests using [Playwright](https://playwright.dev/) against the compiled React dashboard:
 
@@ -183,7 +183,7 @@ npm run test:ui
 ---
 
 ### 4.3 Docker Smoke Test Suite
-Source: [tests/docker-smoke.js](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/tests/docker-smoke.js)
+Source: [tests/docker-smoke.js](../visualization/consumer/tests/docker-smoke.js)
 
 Verifies production container properties:
 - Confirms the container runs under unprivileged UID `1000` (`node`).

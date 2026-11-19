@@ -22,7 +22,7 @@ This document provides complete circuit pinouts, electrical specifications, timi
 ## 2. GPIO Pinout Mapping
 
 ### 2.1 Transmitter Node (Sensor & Remote Hub)
-Source sketch: [transmit-node.ino](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/board/transmit-node/transmit-node.ino)
+Source sketch: [transmit-node.ino](../board/transmit-node/transmit-node.ino)
 
 | NodeMCU Pin | ESP8266 GPIO | Connected Peripheral | Direction | Logic Level / Function |
 | :--- | :--- | :--- | :--- | :--- |
@@ -44,7 +44,7 @@ Source sketch: [transmit-node.ino](file:///home/frdn/Downloads/Kuliah/IoT/Proyek
 ---
 
 ### 2.2 Receiver Node (AC Unit Feedback & Blower Emulator)
-Source sketch: [receive-node.ino](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/board/receive-node/receive-node.ino)
+Source sketch: [receive-node.ino](../board/receive-node/receive-node.ino)
 
 | NodeMCU Pin | ESP8266 GPIO | Connected Peripheral | Direction | Logic Level / Function |
 | :--- | :--- | :--- | :--- | :--- |
@@ -211,7 +211,7 @@ The manual override engine allows operators to suspend automatic rules:
 
 ## 5. Receiver Node Architecture & Logic Engine
 
-Source sketch: [receive-node.ino](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/board/receive-node/receive-node.ino)
+Source sketch: [receive-node.ino](../board/receive-node/receive-node.ino)
 
 ### 5.1 Non-Blocking IR Reception Loop
 The receiver runs a high-priority demodulation check at the beginning of `loop()`:
@@ -284,7 +284,7 @@ Configure Wi-Fi and MQTT parameters:
 ```
 
 ### 6.3 Compilation via Arduino CLI
-The repository includes helper scripts [compile.sh](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/board/compile.sh) and [upload.sh](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/board/upload.sh):
+The repository includes helper scripts [compile.sh](../board/compile.sh) and [upload.sh](../board/upload.sh):
 
 ```bash
 # Compile Transmitter Node
