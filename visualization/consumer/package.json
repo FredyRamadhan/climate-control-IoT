@@ -16,6 +16,7 @@
     "dev:client": "npm run dev --workspace @auto-climate/frontend -- --host 0.0.0.0",
     "build": "npm run build --workspace @auto-climate/frontend",
     "start": "node server/index.js",
+    "telegram:setup": "node server/setup-telegram.js",
     "test": "node --test server/test/*.test.js",
     "test:ui": "npm run build && playwright test",
     "check": "npm test && npm run build"

@@ -25,6 +25,11 @@ services:
       STALE_AFTER_SECONDS: ${STALE_AFTER_SECONDS:-30}
       CORS_ORIGIN: ${CORS_ORIGIN:-}
       ANALYTICS_URL: http://analytics:8001
+      TELEGRAM_ENABLED: ${TELEGRAM_ENABLED:-false}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      TELEGRAM_INTERVAL_MINUTES: ${TELEGRAM_INTERVAL_MINUTES:-30}
+      TELEGRAM_TIMEZONE: ${TELEGRAM_TIMEZONE:-Asia/Jakarta}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     read_only: true

@@ -53,7 +53,7 @@ export class TestClient extends EventEmitter {
 }
 
 export function serviceFixture(overrides = {}) {
-  const config = readConfig({ COMMAND_ACK_TIMEOUT: 0.1, COMMAND_PUBLISH_TIMEOUT: 0.1, ...overrides });
+  const config = readConfig({ TELEGRAM_ENABLED: 'false', COMMAND_ACK_TIMEOUT: 0.1, COMMAND_PUBLISH_TIMEOUT: 0.1, ...overrides });
   const store = new TelemetryStore();
   const client = new TestClient();
   const service = new MqttService({ config, store, logger: quiet, connect: () => client });

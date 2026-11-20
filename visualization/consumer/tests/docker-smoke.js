@@ -23,6 +23,7 @@ const environment = {
   MQTT_PROTOCOL: 'mqtt', MQTT_USER: '', MQTT_PASS: '', MQTT_CLIENT_ID: project,
   COMMAND_ACK_TIMEOUT: '0.2', COMMAND_PUBLISH_TIMEOUT: '2',
   STALE_AFTER_SECONDS: '30', CORS_ORIGIN: '',
+  TELEGRAM_ENABLED: 'false', TELEGRAM_BOT_TOKEN: '', TELEGRAM_CHAT_ID: '',
 };
 const composeArgs = ['compose', '--project-name', project, '--file', join(root, 'compose.yaml'), '--file', overrideFile];
 let started = false;
@@ -82,6 +83,8 @@ try {
   assert.ok(inspection.HostConfig.CapDrop.includes('ALL'));
   assert.ok(inspection.HostConfig.SecurityOpt.some((option) => option.startsWith('no-new-privileges')));
   assert.equal(inspection.State.Health.Status, 'healthy');
+  assert.ok(inspection.Config.Env.includes('TELEGRAM_ENABLED=false'));
+  assert.ok(inspection.Config.Env.includes('TELEGRAM_BOT_TOKEN='));
   console.log('PASS: Compose starts a healthy, unprivileged container with a read-only filesystem.');
 
   assert.equal((await json('/health')).mqtt, false);
@@ -103,12 +106,24 @@ try {
   docker(['exec', container, 'node', '--input-type=module', '-e', `
     import assert from 'node:assert/strict';
     import { existsSync, writeFileSync } from 'node:fs';
+    import { readConfig } from './server/config.js';
+    import { TelegramService } from './server/telegram-service.js';
+    import { formatTelegramStatus } from './server/telegram-status.js';
     assert.notEqual(process.getuid(), 0);
     for (const path of ['/app/.env', '/app/frontend/src', '/app/server/test', '/app/node_modules/vite']) {
       assert.equal(existsSync(path), false, path);
     }
     assert.throws(() => writeFileSync('/app/smoke-write-check', 'blocked'),
       error => ['EROFS', 'EACCES'].includes(error.code));
+    assert.ok(existsSync('/app/server/setup-telegram.js'));
+    let telegramRequests = 0;
+    const bot = new TelegramService({ config: readConfig({ TELEGRAM_ENABLED: 'false' }),
+      client: { call: () => { telegramRequests++; } } });
+    bot.start();
+    await bot.stop();
+    assert.equal(telegramRequests, 0);
+    assert.match(formatTelegramStatus({ snapshot: { metadata: {} }, mqttConnected: false,
+      timezone: 'Asia/Jakarta' }), /Suhu ruangan: Tidak tersedia/);
   `]);
   console.log('PASS: API offline behavior, React assets, production-only dependencies, and excluded secrets.');
 

@@ -5,7 +5,7 @@ import { HttpError } from '../server/schemas.js';
 
 // Browser fixtures intercept the API. This preview never connects to real hardware.
 const app = createApp({
-  config: readConfig({}),
+  config: readConfig({ TELEGRAM_ENABLED: 'false' }),
   store: new TelemetryStore(),
   mqttService: {
     connected: false,

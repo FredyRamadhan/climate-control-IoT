@@ -80,6 +80,49 @@ The multi-stage image contains production backend dependencies and compiled fron
 
 The health check reports process liveness even when MQTT is disconnected. Inspect the response's `mqtt` and `subscriptions_ready` fields to distinguish broker availability. The service reconnects automatically, so a broker outage does not require restarting the container.
 
+## Telegram status bot
+
+The consumer includes an optional headless Telegram bot. It sends a room report to one group every 30 minutes, including when values have not changed. The first scheduled report is 30 minutes after the consumer starts; restarting resets the timer without sending missed reports. Any member of the configured group can send `/status` for an immediate reply, or `/status@YourBotUsername`. MQTT updates do not trigger messages. There are no Telegram settings or controls in the dashboard.
+
+Reports use Indonesian and the configured timezone. They include MQTT and device connectivity, room temperature/humidity/motion, desired AC state and the receiver's last confirmation, automatic/manual mode, outside weather, and update times. Missing, invalid, retained, and stale readings are labelled. Reports read the consumer's telemetry store directly and do not use analytics predictions.
+
+### Configure a group
+
+1. In Telegram, use **@BotFather** and `/newbot` to create a bot. Save its token privately in the consumer's `.env` as `TELEGRAM_BOT_TOKEN`. Keep `TELEGRAM_ENABLED=false` during setup.
+2. Add the bot to a regular group or supergroup and allow it to send messages. Forum topics are not supported. For reliable plain `/status` delivery, use BotFather `/setprivacy` to disable group privacy, then remove and re-add the bot to the group. See [Telegram's group privacy documentation](https://core.telegram.org/bots/features#privacy-mode). The mentioned command `/status@YourBotUsername` also works with privacy enabled.
+3. Stop any consumer or other program polling with this bot token. From the consumer directory, run:
+
+   ```sh
+   npm run telegram:setup
+   ```
+
+   Send `/status@YourBotUsername` in the group when prompted. The command waits up to 25 seconds, prints the bot username and available group IDs, and exits. It does not send messages or print the token or conversation text. If no group appears, send the command again and rerun setup.
+4. Copy the chosen negative group ID into `.env` and enable the worker:
+
+   ```dotenv
+   TELEGRAM_ENABLED=true
+   TELEGRAM_BOT_TOKEN=your-botfather-token
+   TELEGRAM_CHAT_ID=-1001234567890
+   TELEGRAM_INTERVAL_MINUTES=30
+   TELEGRAM_TIMEZONE=Asia/Jakarta
+   ```
+
+5. Restart `npm run dev` or `npm start`. For Compose, use `docker compose up -d consumer` to recreate the consumer with the new environment. Send `/status` in the group to request the first report immediately.
+
+If you use Docker without local Node, run discovery through the production image instead:
+
+```sh
+docker compose stop consumer
+docker compose build consumer
+docker compose run --rm --no-deps -e TELEGRAM_ENABLED=false consumer npm run telegram:setup
+# Edit .env with the discovered group ID and TELEGRAM_ENABLED=true.
+docker compose up -d consumer
+```
+
+Run only one consumer per bot token. The bot uses outgoing HTTPS long polling to `api.telegram.org`; it needs no webhook, incoming port, separate process, or writable storage. An existing webhook is detected and left in place; use a dedicated bot or remove that webhook yourself before restarting. Group discovery also uses long polling, so keep other pollers stopped while running it.
+
+Network/server polling errors retry with a delay of 1–60 seconds; Telegram's `retry_after` rate-limit delay is respected. A failed send is not blindly replayed because it may already have arrived; the next interval or `/status` produces a fresh report. Explicitly rejected rate-limited sends retry after the requested delay. Invalid tokens, denied group permissions, or another poller stop the bot with an actionable log message; correct the problem and restart the consumer. MQTT processing, room controls, analytics, and HTTP health checks continue running. On shutdown, the consumer cancels polling, pending retries, and the reporting timer.
+
 ## Configuration
 
 | Variable | Default | Purpose |
@@ -97,6 +140,11 @@ The health check reports process liveness even when MQTT is disconnected. Inspec
 | `STALE_AFTER_SECONDS` | `30` | Room/receiver telemetry freshness threshold |
 | `CORS_ORIGIN` | Empty | Optional comma-separated browser origins; same-origin by default |
 | `ANALYTICS_URL` | `http://127.0.0.1:8001` | Analytics adapter for local Node; Compose uses `http://analytics:8001` |
+| `TELEGRAM_ENABLED` | `false` | Enable the headless bot; accepts only `true` or `false` |
+| `TELEGRAM_BOT_TOKEN` | Empty | BotFather token, required when enabled; server only |
+| `TELEGRAM_CHAT_ID` | Empty | Negative numeric group ID from `npm run telegram:setup`, required when enabled |
+| `TELEGRAM_INTERVAL_MINUTES` | `30` | Scheduled report interval, integer from 1 to 1440 minutes |
+| `TELEGRAM_TIMEZONE` | `Asia/Jakarta` | IANA timezone used in Telegram reports |
 
 Environment variables take precedence over `.env`. Invalid configuration fails at startup with the affected field name. History is in memory, limited to 100 messages per topic, and resets on restart. Run one instance for a coherent view of history; multiple replicas each keep their own buffers.
 
@@ -146,6 +194,8 @@ npm run test:ui
 
 `check` runs the Node backend tests and the TypeScript/production frontend build. Browser tests use Playwright with the installed Chrome by default; set `PLAYWRIGHT_CHANNEL=msedge` for Edge, or install the Playwright browser with `npx playwright install chromium` and set `PLAYWRIGHT_CHANNEL=chromium`. Browser tests use isolated fixtures and do not send commands to real hardware.
 
+Telegram tests use an injected API and clock to cover configuration, setup discovery, report formatting, 30-minute scheduling, `/status` filtering, update offsets, retries, and shutdown. They do not contact Telegram or send real messages. Browser and Docker smoke fixtures explicitly disable the bot regardless of your `.env`.
+
 With Docker running, validate the production image and Compose settings:
 
 ```sh
@@ -160,8 +210,8 @@ It also verifies the existing Python model through the Express proxy, period fil
 ## Source layout
 
 ```text
-server/             Express routes, MQTT lifecycle, schemas, bounded telemetry store
-server/test/        API and command/telemetry integration tests
+server/             Express, MQTT lifecycle, telemetry store, headless Telegram worker/setup
+server/test/        API, command/telemetry, and mocked Telegram tests
 frontend/src/       React components, polling, theme, display helpers
 frontend/public/    Self-hosted fonts and the original AC photograph
 tests/              Browser interaction and responsive-layout tests
