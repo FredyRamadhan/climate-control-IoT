@@ -70,6 +70,11 @@ services:
       STALE_AFTER_SECONDS: ${STALE_AFTER_SECONDS:-30}
       CORS_ORIGIN: ${CORS_ORIGIN:-}
       ANALYTICS_URL: http://analytics:8001
+      TELEGRAM_ENABLED: ${TELEGRAM_ENABLED:-false}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      TELEGRAM_INTERVAL_MINUTES: ${TELEGRAM_INTERVAL_MINUTES:-30}
+      TELEGRAM_TIMEZONE: ${TELEGRAM_TIMEZONE:-Asia/Jakarta}
     depends_on:
       broker:
         condition: service_healthy
@@ -97,12 +102,9 @@ services:
     image: auto-climate-producer:latest
     container_name: iot-weather-producer
     restart: unless-stopped
-    # The producer reads its own settings (API key, city, poll interval) from
-    # utils/api-producer/.env. A repository-root .env is also accepted; values
-    # in the producer file take precedence because it is listed last.
+    # The producer reads weather settings (API key, city, poll interval) from
+    # utils/api-producer/.env. Broker connection is set explicitly below.
     env_file:
-      - path: ./.env
-        required: false
       - path: ./utils/api-producer/.env
         required: false
     environment:
