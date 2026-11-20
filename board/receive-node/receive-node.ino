@@ -5,6 +5,7 @@
 #include <IRutils.h>
 #include <ArduinoJson.h>
 #include <time.h>
+#include <string.h>
 #include "secrets.h"
 
 // ==========================================
@@ -31,6 +32,13 @@
 #define WIFI_RETRY_MS        10000UL
 #define MQTT_RETRY_MS        10000UL
 #define STATE_MIN_PUBLISH_MS 1000UL   // De-duplicate repeated identical frames
+#define FW_VERSION "2.2.0-rx"
+#define TCP_TIMEOUT_MS 500UL
+#define IR_QUIET_MS 150UL
+// Enable only after a bench test proves low/medium cannot start unaided.
+#ifndef FAN_START_BOOST_MS
+#define FAN_START_BOOST_MS 0UL
+#endif
 
 // ==========================================
 // IR Protocol (must match transmit-node)
@@ -77,6 +85,19 @@ uint8_t targetTempC = 24;
 FanSpeed fanSpeed = FAN_OFF;
 uint16_t fanPwm = FAN_PWM_OFF;
 bool stateValid = false;
+FanSpeed receivedFanSpeed = FAN_OFF;
+bool motorOverride = false;
+bool boostActive = false;
+unsigned long boostStartedMs = 0;
+bool statePending = false;
+const char* pendingSource = "boot";
+unsigned long lastPublishAttemptMs = 0;
+unsigned long lastIrActivityMs = 0;
+
+void queueState(const char* source) {
+  statePending = true;
+  pendingSource = source;
+}
 
 unsigned long lastStatePublishMs = 0;
 unsigned long lastWifiAttemptMs = 0;
@@ -118,17 +139,79 @@ void setFanSpeed(FanSpeed speed) {
       break;
   }
 
-  bool changed = (fanPwm != pwm) || (fanSpeed != speed);
+  bool starting = fanSpeed == FAN_OFF && speed != FAN_OFF && speed != FAN_HIGH;
+  bool changed = fanSpeed != speed;
+  if (changed) {
+    boostActive = starting && FAN_START_BOOST_MS > 0;
+    boostStartedMs = millis();
+  }
   fanSpeed = speed;
-  fanPwm = pwm;
-  analogWrite(PIN_FAN, pwm);
+  fanPwm = boostActive ? FAN_PWM_HIGH : pwm;
+  // Avoid rewriting the PWM generator for every identical IR heartbeat.
+  // Off/high are static outputs and do not require a PWM timer.
+  if (changed || speed == FAN_OFF) {
+    if (fanPwm == FAN_PWM_OFF || fanPwm == FAN_PWM_HIGH)
+      digitalWrite(PIN_FAN, fanPwm ? HIGH : LOW);
+    else
+      analogWrite(PIN_FAN, fanPwm);
+  }
 
   if (changed) {
     Serial.print("[Fan] Speed set to ");
     Serial.print(fanSpeedToString(speed));
     Serial.print(" (PWM: ");
-    Serial.print(pwm);
+    Serial.print(fanPwm);
     Serial.println("/1023)");
+  }
+}
+
+void maintainFan() {
+  if (!boostActive || millis() - boostStartedMs < FAN_START_BOOST_MS) return;
+  boostActive = false;
+  fanPwm = fanSpeed == FAN_LOW ? FAN_PWM_LOW : FAN_PWM_MED;
+  analogWrite(PIN_FAN, fanPwm);
+  queueState("motor-boost-complete");
+}
+
+void handleMotorCommand(const char* command) {
+  if (strcmp(command, "motor release") == 0) {
+    motorOverride = false;
+    setFanSpeed(stateValid ? receivedFanSpeed : FAN_OFF);
+    Serial.println("[Motor] IR control restored.");
+  } else {
+    FanSpeed speed;
+    if (strcmp(command, "motor off") == 0) speed = FAN_OFF;
+    else if (strcmp(command, "motor low") == 0) speed = FAN_LOW;
+    else if (strcmp(command, "motor medium") == 0) speed = FAN_MEDIUM;
+    else if (strcmp(command, "motor high") == 0) speed = FAN_HIGH;
+    else {
+      Serial.println("[Motor] Use motor off|low|medium|high|release");
+      return;
+    }
+    motorOverride = true;
+    setFanSpeed(speed);
+    Serial.println("[Motor] Manual control active; IR capture continues.");
+  }
+  queueState("serial-motor");
+}
+
+void pollSerial() {
+  static char line[32];
+  static size_t length = 0;
+  static bool overflow = false;
+  // Bound work per loop; never wait for a newline.
+  for (uint8_t n = 0; n < 32 && Serial.available(); ++n) {
+    char c = Serial.read();
+    if (c == '\r' || c == '\n') {
+      if (overflow) Serial.println("[Motor] Command too long; ignored.");
+      else if (length) {
+        line[length] = '\0';
+        handleMotorCommand(line);
+      }
+      length = 0;
+      overflow = false;
+    } else if (length < sizeof(line) - 1 && !overflow) line[length++] = c;
+    else overflow = true;
   }
 }
 
@@ -140,6 +223,7 @@ bool decodeAcFrame(uint32_t rawValue, bool &outPowerOn, uint8_t &outTargetTemp,
   uint8_t invertedTemp = rawValue & 0xFF;
 
   if (header != AC_IR_HEADER) {
+    Serial.println("[IR] Wrong AC header.");
     return false;
   }
 
@@ -183,8 +267,14 @@ void publishState(const char* source) {
   doc["timestamp"] = getTimestamp();
   doc["state_valid"] = stateValid;
   doc["source"] = source;
+  doc["motor_override"] = motorOverride;
+  doc["ir_fan_speed"] = fanSpeedToString(receivedFanSpeed);
 
-  char jsonBuffer[256];
+  char jsonBuffer[384];
+  if (measureJson(doc) >= sizeof(jsonBuffer)) {
+    Serial.println("[MQTT] State exceeds JSON buffer.");
+    return;
+  }
   size_t length = serializeJson(doc, jsonBuffer, sizeof(jsonBuffer));
   if (length == 0) {
     Serial.println("[MQTT] Failed to serialize state (buffer too small).");
@@ -192,7 +282,10 @@ void publishState(const char* source) {
   }
 
   bool published = mqttClient.publish(MQTT_TOPIC_STATE, jsonBuffer, true);
-  if (published) lastStatePublishMs = millis();
+  if (published) {
+    lastStatePublishMs = millis();
+    statePending = false;
+  }
 
   Serial.print("[MQTT] ");
   Serial.print(MQTT_TOPIC_STATE);
@@ -204,14 +297,15 @@ void applyDecodedState(bool powerOn, uint8_t tempC, FanSpeed fan) {
   bool changed = !stateValid ||
                  (powerOn != acPowerState) ||
                  (tempC != targetTempC) ||
-                 (fan != fanSpeed);
+                 (fan != receivedFanSpeed);
 
   acPowerState = powerOn;
   targetTempC = tempC;
   stateValid = true;
+  receivedFanSpeed = fan;
 
   setPowerIndicator(acPowerState);
-  setFanSpeed(fan);
+  if (!motorOverride) setFanSpeed(fan);
 
   Serial.print("[AC] power=");
   Serial.print(acPowerState ? "on" : "off");
@@ -222,7 +316,7 @@ void applyDecodedState(bool powerOn, uint8_t tempC, FanSpeed fan) {
 
   unsigned long now = millis();
   if (changed || (now - lastStatePublishMs >= STATE_MIN_PUBLISH_MS)) {
-    publishState(changed ? "ir-change" : "ir-heartbeat");
+    queueState(changed ? "ir-change" : "ir-heartbeat");
   }
 }
 
@@ -280,13 +374,14 @@ void maintainMqtt() {
   bool connected = mqttClient.connect(
       clientId.c_str(), MQTT_USER, MQTT_PASS,
       MQTT_TOPIC_STATUS, 1, true, "{\"online\":false}");
+  Serial.printf("[MQTT] Connect took %lu ms\n", millis() - now);
 
   if (connected) {
     Serial.println("[MQTT] Connected.");
     mqttClient.publish(MQTT_TOPIC_STATUS, "{\"online\":true}", true);
     // Publish current (possibly default/not-yet-synced) state so dashboards
     // receive something immediately after a broker/connection restart.
-    publishState("mqtt-connected");
+    if (!statePending) queueState("mqtt-connected");
   } else {
     Serial.print("[MQTT] Connection failed, rc=");
     Serial.print(mqttClient.state());
@@ -298,11 +393,21 @@ void maintainMqtt() {
 // Arduino lifecycle
 // ==========================================
 void setup() {
+  pinMode(PIN_FAN, OUTPUT);
+  digitalWrite(PIN_FAN, LOW);
   Serial.begin(115200);
   delay(100);
 
   Serial.println();
   Serial.println("--- IoT Climate Control: Receiver / AC Feedback + Blower ---");
+  Serial.printf("[Boot] FW=%s core=%s SDK=%s IR=%s\n", FW_VERSION,
+                ESP.getCoreVersion().c_str(), ESP.getSdkVersion(), _IRREMOTEESP8266_VERSION_STR);
+  Serial.printf("[Boot] ArduinoJson=%s PubSubClient=2.8 (validated baseline)\n", ARDUINOJSON_VERSION);
+  Serial.print("[Boot] Reset: ");
+  Serial.println(ESP.getResetReason());
+  Serial.printf("[Boot] IR=D5/GPIO%d motor=D1/GPIO%d LED=D7/GPIO%d PWM=1000Hz/1023 boost=%lums\n",
+                PIN_IR_RECV, PIN_FAN, PIN_LED, (unsigned long)FAN_START_BOOST_MS);
+  Serial.println("[Boot] Motor OFF. Serial: motor off|low|medium|high|release");
 
   pinMode(PIN_LED, OUTPUT);
   setPowerIndicator(false);
@@ -321,23 +426,30 @@ void setup() {
   mqttClient.setBufferSize(512);
   mqttClient.setKeepAlive(15);
   mqttClient.setSocketTimeout(3);
+  // Core 3.1.2 uses Stream's timeout for DNS, TCP connect and writes.
+  espClient.setTimeout(TCP_TIMEOUT_MS);
 
   lastWifiAttemptMs = millis();
   lastMqttAttemptMs = millis() - MQTT_RETRY_MS;
 }
 
 void loop() {
-  // Decode IR first. The receiver is resumed before any MQTT publish, so a
-  // slow network operation cannot make us miss the next IR frame.
+  // Drain capture before local commands and network work. Network calls can
+  // still delay decoding; resuming here is not a guarantee of lossless capture.
   if (irReceiver.decode(&results)) {
     // Copy what we need, then resume reception before any slow MQTT publish.
     uint64_t rawValue = results.value;
     uint16_t bitCount = results.bits;
     bool isRepeat = results.repeat;
+    bool overflow = results.overflow;
     decode_type_t protocol = results.decode_type;
     irReceiver.resume();
+    lastIrActivityMs = millis();
+    Serial.printf("[IR] capture protocol=%s bits=%u repeat=%u overflow=%u value=0x%08lX%08lX\n",
+                  typeToString(protocol).c_str(), bitCount, isRepeat, overflow,
+                  (unsigned long)(rawValue >> 32), (unsigned long)rawValue);
 
-    if (!isRepeat && bitCount == 32 &&
+    if (!overflow && !isRepeat && bitCount == 32 &&
         (protocol == decode_type_t::NEC || protocol == decode_type_t::NEC_LIKE)) {
       uint32_t frame = (uint32_t)rawValue;
       char hexBuffer[11];
@@ -354,12 +466,32 @@ void loop() {
       } else {
         Serial.println("[IR] Ignoring frame that is not a valid AC command.");
       }
+    } else {
+      Serial.println("[IR] Ignored: repeat, overflow, unsupported protocol or bit count.");
     }
   }
 
+  pollSerial();
+  maintainFan();
+  // The library has no public capture-active API. A recently observed LOW or
+  // completed capture conservatively defers networking across NEC gaps/repeats.
+  // An edge arriving after this check can still overlap a synchronous MQTT call.
+  if (digitalRead(PIN_IR_RECV) == LOW) lastIrActivityMs = millis();
+  if (boostActive || millis() - lastIrActivityMs < IR_QUIET_MS) {
+    yield();
+    return;
+  }
+  unsigned long networkStartedMs = millis();
   maintainWifi();
   if (WiFi.status() == WL_CONNECTED) {
     maintainMqtt();
   }
   mqttClient.loop();
+  if (statePending && mqttClient.connected() &&
+      millis() - lastPublishAttemptMs >= STATE_MIN_PUBLISH_MS) {
+    lastPublishAttemptMs = millis();
+    publishState(pendingSource);
+  }
+  unsigned long networkMs = millis() - networkStartedMs;
+  if (networkMs >= 100) Serial.printf("[Network] Loop stalled %lu ms\n", networkMs);
 }

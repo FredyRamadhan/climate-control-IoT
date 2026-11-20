@@ -1,0 +1,93 @@
+Receiver diagnosis and acceptance checks
+========================================
+
+Validated build baseline: ESP8266 Arduino core 3.1.2, NodeMCU v2,
+IRremoteESP8266 2.8.6, PubSubClient 2.8.0, ArduinoJson 7.4.2.
+Boot logs show firmware/core/SDK/IR/JSON versions. PubSubClient does not expose
+a runtime version macro; its logged version names the validated baseline.
+IRremoteESP8266 2.8.6 IRrecv.cpp uses ETSTimer/os_timer; analogWrite uses
+Timer1 in core 3.1.2. No timer reassignment is needed for this baseline.
+
+Build using Arduino IDE or arduino-cli:
+  arduino-cli core install esp8266:esp8266@3.1.2
+  arduino-cli lib install "IRremoteESP8266@2.8.6" "PubSubClient@2.8" "ArduinoJson@7.4.2"
+Copy secrets.h.example to secrets.h and fill in your credentials locally.
+  arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 receive-node
+Flash only the receiver using its actual serial port.
+
+1. Open Serial Monitor at 115200 baud with newline or CRLF enabled.
+   Expect reset reason, configured pins and Motor OFF. No automatic motor test
+   runs. Motor stays off until a valid IR command or explicit serial command.
+
+2. Inspect the hardware before testing motion:
+   IR OUT -> D5/GPIO14, status LED -> D7/GPIO13, transistor drive -> D1/GPIO5.
+   Check IR module markings/datasheet for its pin order and supply requirements;
+   OUT must be compatible with 3.3 V GPIO. Idle OUT should be HIGH and pulse LOW
+   under IR. Check wiring with motor power disconnected if there are no captures.
+   Motor supply must match its voltage and startup current; use common ground
+   with the ESP8266. Do not power the motor from a GPIO or the 3.3 V regulator.
+   For a low-side 2N2222 driver, verify the actual part's E/B/C pinout, emitter
+   to ground, collector to motor negative, motor positive to supply, and a base
+   resistor. Check a flyback diode across the motor: cathode to supply positive.
+   Check transistor dissipation and startup current against its datasheet and
+   available base drive. Use a suitably rated 3.3 V logic-level MOSFET if needed.
+
+3. Send motor high. It runs at full duty until another manual command or release.
+   IR still logs and updates stored AC state but cannot change motor output.
+   GPIO5 should be steady HIGH. If HIGH but stopped, measure supply under load,
+   collector voltage and transistor/base drive; repair hardware before PWM tuning.
+   Send motor off; GPIO5 should be LOW and motor stop.
+   Test motor low (341/1023), motor medium (682/1023), motor high (1023/1023).
+   Low/medium should show 1 kHz PWM. Repeated identical commands must be stable.
+   Invalid/overlong commands must not alter output. Send motor release to restore
+   the latest valid received fan speed, or OFF if no valid frame has arrived.
+
+4. If high works but low/medium stall from rest, measure a reliable minimum duty.
+   Adjust FAN_PWM_LOW/MED to the measured values if necessary. To enable the
+   optional startup boost, define FAN_START_BOOST_MS 300 in local secrets.h.
+   It applies only on OFF -> LOW/MEDIUM, uses no delay, and OFF cancels it.
+   It is disabled by default. Verify completion after 300 ms, immediate OFF,
+   repeated low during boost, and switching high/off before boost completes.
+
+5. Use the transmitter's EXISTING MQTT interface; do not change its firmware:
+   Topic: transmit/command
+   Payload: {"action":"override","relay_on":true,"target_temp":24,"fan_speed":"high","duration_s":120}
+   Send through your usual MQTT client with broker credentials. Repeat with
+   off/low/medium/high fan_speed. Send {"action":"release"} when done.
+   Automatic rules can legitimately request fan OFF (including low humidity).
+   Explicit override avoids mistaking that behavior for receiver failure.
+   Compare transmitter TX value with receiver RX, then AC state, indicator,
+   motor and retained receive/state. motor_override must be false for IR drive.
+   Standalone NEC repeats, overflow, unrelated protocols and corrupt frames
+   must leave outputs unchanged. Capture logs explain discarded messages.
+
+6. Reboot receiver while transmitter remains on. It must recover the latest
+   state at the next heartbeat, normally within 60 seconds. No old state is
+   restored from retained MQTT; the receiver follows valid IR only.
+   Repeat IR tests with Wi-Fi absent and broker unreachable, then restore them.
+   IR must still actuate locally; reconnect must publish the latest state.
+   Observe [MQTT] Connect took and [Network] Loop stalled logs.
+   TCP/DNS/write timeout is 500 ms per operation, MQTT response timeout is 3 s;
+   PubSubClient is synchronous, so these are not a total-loop latency guarantee.
+   Networking waits for 150 ms after observed IR LOW/capture and during boost.
+   The quiet check is best effort: a new frame can begin during network work.
+   If bench tests still show lost commands, use the measured stall/capture logs
+   to evaluate asynchronous MQTT rather than weakening protocol validation.
+
+7. Compare reception with motor OFF and running at all speeds. New failures only
+   under motor load suggest supply droop/noise. Measure rails; correct grounding,
+   wiring, driver suppression and decoupling based on those measurements.
+
+MQTT topics and original JSON fields are preserved. Additional fields:
+  motor_override: true while serial motor control owns the output
+  ir_fan_speed: most recent decoded IR request (off before first valid frame)
+fan_speed/fan_pwm describe commanded motor output, including boost PWM;
+state_valid describes whether an AC frame has been received, not motor feedback.
+MQTT publication coalesces to the latest state with at most one attempt per
+second, retaining pending state after failures. IR control does not depend on it.
+
+Protocol regression test (host g++ or ESP8266 cross compiler):
+  python receive-node/tests/check_protocol.py --compiler <path-to-g++>
+This compiles assertions against extracted production functions, tests all 120
+state combinations and rejects corruption/range errors without changing outputs.
+It does not establish physical motor operation or IR reception.
