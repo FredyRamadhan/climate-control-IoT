@@ -8,7 +8,7 @@ function dashboard() {
     health: { status: 'ok', mqtt: true, subscriptions_ready: true },
     transmit: {
       temp: 26.4, hum: 58, motion: true, timestamp: Math.floor(Date.now() / 1000),
-      target_temp: 24, fan_speed: 'medium', relay_on: true, sensor_ok: true,
+      target_temp: 24, fan_speed: 'medium', relay_on: true, light_on: true, sensor_ok: true,
       ir_sent: true, uptime_ms: 7200000, override: false,
     },
     receive: { temp: 24, fan_speed: 'medium', ac_power_state: true, timestamp: 1, state_valid: true },
@@ -36,6 +36,8 @@ test('renders real sensor values, converts Kelvin weather, and prefills device c
   await expect(page.getByRole('slider', { name: 'Temperatur target' })).toHaveValue('24');
   await expect(page.getByRole('button', { name: 'Sedang', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('switch', { name: 'Daya AC' })).toBeChecked();
+  await expect(page.getByRole('switch', { name: 'Lampu ruangan' })).toBeChecked();
+  await expect(page.locator('.device-detail').last()).toContainText('Nyala');
   await expect(page.getByRole('button', { name: 'Terapkan pengaturan' })).toBeEnabled();
   await expect(page.getByRole('img', { name: 'Unit air conditioner di ruang utama' })).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
@@ -53,21 +55,24 @@ test('keeps unsent edits through refresh, publishes chosen values, and releases 
     commands.push(body);
     if (body.action === 'override') {
       snapshot = { ...dashboard(), transmit: { ...snapshot.transmit, target_temp: body.target_temp,
-        fan_speed: body.fan_speed, relay_on: body.relay_on, override: true, override_indefinite: body.duration_s === 0 } };
+        fan_speed: body.fan_speed, relay_on: body.relay_on, light_on: body.light_on,
+        override: true, override_indefinite: body.duration_s === 0 } };
     } else snapshot = { ...dashboard(), transmit: { ...snapshot.transmit, override: false } };
     await route.fulfill({ json: { request_id: body.request_id, sent: body, ack: { ok: true, override: body.action === 'override' } } });
   });
   await page.goto('/');
   await expect(page.getByRole('button', { name: 'Terapkan pengaturan' })).toBeEnabled();
+  await expect(page.getByLabel('Durasi override', { exact: true })).toHaveValue('0');
   await page.getByRole('button', { name: 'Naikkan temperatur' }).click();
   await page.getByRole('button', { name: 'Tinggi', exact: true }).click();
   await page.getByRole('switch', { name: 'Daya AC' }).click();
+  await page.getByRole('switch', { name: 'Lampu ruangan' }).click();
   await page.getByLabel('Durasi override', { exact: true }).selectOption('0');
   await page.getByRole('button', { name: 'Muat ulang data' }).click();
   await expect(page.getByRole('slider', { name: 'Temperatur target' })).toHaveValue('25');
   await page.getByRole('button', { name: 'Terapkan pengaturan' }).click();
   await expect(page.getByText('Pengaturan diterapkan. Perangkat telah mengonfirmasi.')).toBeVisible();
-  expect(commands[0]).toMatchObject({ action: 'override', target_temp: 25, fan_speed: 'high', relay_on: false, duration_s: 0 });
+  expect(commands[0]).toMatchObject({ action: 'override', target_temp: 25, fan_speed: 'high', relay_on: false, light_on: false, duration_s: 0 });
   expect(commands[0].request_id).toMatch(/^dash-/);
   await expect(page.getByText('Override aktif', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Kembali ke otomatis' }).click();

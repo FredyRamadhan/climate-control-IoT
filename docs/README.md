@@ -10,14 +10,15 @@ This documentation is organized into modular guides covering every layer of the 
 
 | Document | Description | Key Topics |
 | :--- | :--- | :--- |
-| **[system-architecture.md](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/docs/system-architecture.md)** | System Overview & Architecture | Node roles, physical topology, protocol stack, security boundaries, and communication flows. |
-| **[mqtt-protocol-and-topics.md](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/docs/mqtt-protocol-and-topics.md)** | MQTT Wire Protocol & Payloads | Complete topic catalog, Zod & JSON schemas, retain policies, LWT mechanics, and the 32-bit NEC IR protocol. |
-| **[hardware-and-firmware.md](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/docs/hardware-and-firmware.md)** | Hardware Specifications & Firmware | ESP8266 pinout mapping, HC-SR501 PIR, DHT11, KY-005 IR emitter, VS1838B receiver, relay actuators, PWM fan circuit, rule engine, and override logic. |
-| **[consumer-backend-api.md](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/docs/consumer-backend-api.md)** | Consumer Backend & REST API | Express 5 architecture, in-memory ring buffer (`TelemetryStore`), `MqttService`, command dispatch lifecycle, and all REST endpoints. |
-| **[frontend-dashboard.md](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/docs/frontend-dashboard.md)** | Frontend Web Application | React 19 + TypeScript + Vite, theme engine, polling hooks, manual control forms, optimistic drafts, and asset management. |
-| **[analytics-and-ml.md](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/docs/analytics-and-ml.md)** | Machine Learning & Analytics Hub | 100k synthetic dataset generation, physics-based energy model, regression pipelines, benchmarks, and the 6-tab Streamlit dashboard. |
-| **[broker-and-infrastructure.md](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/docs/broker-and-infrastructure.md)** | Broker Deployment & Security | Eclipse Mosquitto 2 containerization, credentials administration (`manage_mqtt_auth.sh`), TCP/WebSocket listeners, and network troubleshooting. |
-| **[utilities-and-testing.md](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/docs/utilities-and-testing.md)** | Utilities, Tools & Testing Suite | OpenWeatherMap poller (`api-producer`), IR override CLI (`ir_override.py`), end-to-end integration test (`e2e_integration_test.py`), unit tests, and Playwright UI tests. |
+| **[system-architecture.md](../docs/system-architecture.md)** | System Overview & Architecture | Node roles, physical topology, protocol stack, security boundaries, and communication flows. |
+| **[mqtt-protocol-and-topics.md](../docs/mqtt-protocol-and-topics.md)** | MQTT Wire Protocol & Payloads | Complete topic catalog, Zod & JSON schemas, retain policies, LWT mechanics, and the 32-bit NEC IR protocol. |
+| **[hardware-and-firmware.md](../docs/hardware-and-firmware.md)** | Hardware Specifications & Firmware | ESP8266 pinout mapping, HC-SR501 PIR, DHT11, KY-005 IR emitter, VS1838B receiver, the transmitter lighting relay, PWM fan circuit, rule engine, and override logic. |
+| **[consumer-backend-api.md](../docs/consumer-backend-api.md)** | Consumer Backend & REST API | Express 5 architecture, in-memory ring buffer (`TelemetryStore`), `MqttService`, command dispatch lifecycle, and all REST endpoints. |
+| **[frontend-dashboard.md](../docs/frontend-dashboard.md)** | Frontend Web Application | React 19 + TypeScript + Vite, theme engine, polling hooks, manual control forms, optimistic drafts, and asset management. |
+| **[analytics-and-ml.md](../docs/analytics-and-ml.md)** | Machine Learning & Analytics Hub | 100k synthetic dataset generation, physics-based energy model, regression pipelines, benchmarks, and the 6-tab Streamlit dashboard. |
+| **[broker-and-infrastructure.md](../docs/broker-and-infrastructure.md)** | Broker Deployment & Security | Eclipse Mosquitto 2 containerization, credentials administration (`manage_mqtt_auth.sh`), TCP/WebSocket listeners, and network troubleshooting. |
+| **[deployment-guide.md](../docs/deployment-guide.md)** | Production Deployment Guide | Turnkey multi-container Docker Compose, Process Manager (PM2/Systemd), Nginx SSL reverse proxy, and hardware provisioning. |
+| **[utilities-and-testing.md](../docs/utilities-and-testing.md)** | Utilities, Tools & Testing Suite | OpenWeatherMap poller (`api-producer`), IR override CLI (`ir_override.py`), end-to-end integration test (`e2e_integration_test.py`), unit tests, and Playwright UI tests. |
 
 ---
 
@@ -30,33 +31,33 @@ flowchart TD
     end
 
     subgraph Environment ["Room Environment"]
-        Sensors["Sensors<br/>- HC-SR501 PIR (Motion)<br/>- DHT11 (Temp & Humidity)"]
-        TransmitterNode["Transmitter Node (ESP8266)<br/><code>board/transmit-node</code><br/>Rule engine + IR remote"]
-        Sensors -->|GPIO14 & GPIO2| TransmitterNode
-        TransmitterNode -->|GPIO12 opto-isolated relay<br/>(occupancy-based, 2h idle auto-off)| RoomLight["Room Lighting Actuator"]
-        TransmitterNode -->|38 kHz NEC IR: AC ON/OFF, 16-30°C setpoint, fan mode<br/>(no mains relay cutoff)| ACUnitPhysical["Conventional AC Unit (Wall Unit)<br/>IR-driven only"]
-        TransmitterNode -.->|same 38 kHz NEC IR frames<br/>(feedback decode)| ReceiverNode
+        Sensors["Sensors\n- HC-SR501 PIR (Motion)\n- DHT11 (Temp and Humidity)"]
+        TransmitterNode["Transmitter Node (ESP8266)\nboard/transmit-node\nRule engine + IR remote"]
+        Sensors -->|GPIO14 and GPIO2| TransmitterNode
+        TransmitterNode -->|"GPIO12 opto-isolated relay\n(occupancy-based, 2h idle auto-off)"| RoomLight["Room Lighting Actuator"]
+        TransmitterNode -->|"38 kHz NEC IR: AC ON/OFF, 16-30 degC setpoint, fan mode\n(no mains relay cutoff)"| ACUnitPhysical["Conventional AC Unit (Wall Unit)\nIR-driven only"]
+        TransmitterNode -.->|"same 38 kHz NEC IR frames\n(feedback decode)"| ReceiverNode
     end
 
-    subgraph ACUnit ["AC Feedback Listener & Blower Simulator"]
-        ReceiverNode["Receiver Node (ESP8266)<br/><code>board/receive-node</code><br/>VS1838B IR demodulator"]
+    subgraph ACUnit ["AC Feedback Listener and Blower Simulator"]
+        ReceiverNode["Receiver Node (ESP8266)\nboard/receive-node\nVS1838B IR demodulator"]
         ReceiverNode -->|GPIO5 1 kHz PWM via 2N2222| FanMotor["DC Blower Fan (Speed Simulation)"]
         ReceiverNode -->|GPIO13 Status LED| StateLED["Decoded AC Power State Indicator"]
     end
 
     subgraph BrokerCluster ["Message Broker"]
-        Mosquitto["Eclipse Mosquitto 2<br/><code>broker/mosquitto.conf</code><br/>Ports: 1883 (TCP), 9001 (WS)"]
+        Mosquitto["Eclipse Mosquitto 2\nbroker/mosquitto.conf\nPort: 1883 TCP"]
     end
 
-    subgraph Services ["Backend & Ingestion"]
-        Producer["API-Producer (Python)<br/><code>utils/api-producer/main.py</code>"]
-        Consumer["Consumer Backend (Express 5)<br/><code>visualization/consumer/server/index.js</code>"]
-        IROverride["IR Override CLI<br/><code>utils/tools/ir_override.py</code>"]
+    subgraph Services ["Backend and Ingestion"]
+        Producer["API-Producer (Python)\nutils/api-producer/main.py"]
+        Consumer["Consumer Backend (Express 5)\nvisualization/consumer/server/index.js"]
+        IROverride["IR Override CLI\nutils/tools/ir_override.py"]
     end
 
-    subgraph Presentation ["User Interfaces & Analytics"]
-        WebUI["React 19 Dashboard<br/><code>visualization/consumer/frontend</code>"]
-        StreamlitUI["Streamlit Analytics & ML<br/><code>visualization/analytics/app.py</code>"]
+    subgraph Presentation ["User Interfaces and Analytics"]
+        WebUI["React 19 Dashboard\nvisualization/consumer/frontend"]
+        StreamlitUI["Streamlit Analytics and ML\nvisualization/analytics/app.py"]
     end
 
     OWM -->|HTTPS REST| Producer
@@ -64,7 +65,7 @@ flowchart TD
     TransmitterNode -->|transmit/data, transmit/status| Mosquitto
     Mosquitto -->|transmit/command| TransmitterNode
     TransmitterNode -->|transmit/command/ack| Mosquitto
-    ReceiverNode -->|receive/state (decoded IR), receive/status| Mosquitto
+    ReceiverNode -->|"receive/state (decoded IR), receive/status"| Mosquitto
     IROverride -->|transmit/command| Mosquitto
     Mosquitto -->|Subscribed Telemetry & Acks| Consumer
     Consumer -->|POST /command| Mosquitto
@@ -78,14 +79,14 @@ flowchart TD
 
 | Component | Language / Framework | Runtime / Platform | Primary Responsibilities | Reference Location |
 | :--- | :--- | :--- | :--- | :--- |
-| **Transmitter Node** | C++ (Arduino Core) | ESP8266 (NodeMCU v2 / D1) | Samples PIR & DHT11, runs rule engine, fires IR signals for AC control, controls light relay, processes manual commands. | [transmit-node.ino](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/board/transmit-node/transmit-node.ino) |
-| **Receiver Node** | C++ (Arduino Core) | ESP8266 (NodeMCU v2 / D1) | Decodes 38 kHz NEC IR signals, modulates fan PWM (2N2222) for speed simulation, publishes verified AC operating state. | [receive-node.ino](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/board/receive-node/receive-node.ino) |
-| **MQTT Broker** | C (Eclipse Mosquitto 2) | Docker Alpine | Central message bus, user authentication, topic persistence, WebSocket bridging. | [mosquitto.conf](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/broker/mosquitto.conf) |
-| **API Producer** | Python 3.10+ (`requests`, `paho-mqtt`) | Linux Daemon / CLI | Polls OpenWeatherMap REST API, synthesizes weather fallback, publishes retained weather data. | [main.py](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/utils/api-producer/main.py) |
-| **Consumer Backend** | JavaScript (Node.js >= 22.12, Express 5, Zod) | Node.js / Docker | Ingests MQTT streams, in-memory sliding window ring buffer, command dispatch & ACK correlation, REST API. | [index.js](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/server/index.js) |
-| **Consumer Frontend** | TypeScript, React 19, Vite 6 | Browser / SPA | Real-time climate monitoring, localized Indonesian dashboard, manual overrides, dark/light theme. | [App.tsx](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/frontend/src/App.tsx) |
-| **Analytics & ML** | Python 3 (`scikit-learn`, `pandas`, `plotly`, `streamlit`) | Python Virtualenv | Synthetic telemetry generator (100k rows), power consumption regression, interactive diagnostic dashboard. | [app.py](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/analytics/app.py) |
-| **IR Override CLI** | Python 3 (`paho-mqtt`) | CLI Utility | Operator tool for raw NEC IR frames, immediate state overrides, and duration control. | [ir_override.py](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/utils/tools/ir_override.py) |
+| **Transmitter Node** | C++ (Arduino Core) | ESP8266 (NodeMCU v2 / D1) | Samples PIR & DHT11, runs rule engine, fires IR signals for AC control, controls light relay, processes manual commands. | [transmit-node.ino](../board/transmit-node/transmit-node.ino) |
+| **Receiver Node** | C++ (Arduino Core) | ESP8266 (NodeMCU v2 / D1) | Decodes 38 kHz NEC IR signals, modulates fan PWM (2N2222) for speed simulation, publishes verified AC operating state. | [receive-node.ino](../board/receive-node/receive-node.ino) |
+| **MQTT Broker** | C (Eclipse Mosquitto 2) | Docker Alpine | Central message bus, user authentication, topic persistence, WebSocket bridging. | [mosquitto.conf](../broker/mosquitto.conf) |
+| **API Producer** | Python 3.10+ (`requests`, `paho-mqtt`) | Linux Daemon / CLI | Polls OpenWeatherMap REST API, synthesizes weather fallback, publishes retained weather data. | [main.py](../utils/api-producer/main.py) |
+| **Consumer Backend** | JavaScript (Node.js >= 22.12, Express 5, Zod) | Node.js / Docker | Ingests MQTT streams, in-memory sliding window ring buffer, command dispatch & ACK correlation, REST API. | [index.js](../visualization/consumer/server/index.js) |
+| **Consumer Frontend** | TypeScript, React 19, Vite 6 | Browser / SPA | Real-time climate monitoring, localized Indonesian dashboard, manual overrides, dark/light theme. | [App.tsx](../visualization/consumer/frontend/src/App.tsx) |
+| **Analytics & ML** | Python 3 (`scikit-learn`, `pandas`, `plotly`, `streamlit`) | Python Virtualenv | Synthetic telemetry generator (100k rows), power consumption regression, interactive diagnostic dashboard. | [app.py](../visualization/analytics/app.py) |
+| **IR Override CLI** | Python 3 (`paho-mqtt`) | CLI Utility | Operator tool for raw NEC IR frames, immediate state overrides, and duration control. | [ir_override.py](../utils/tools/ir_override.py) |
 
 ---
 

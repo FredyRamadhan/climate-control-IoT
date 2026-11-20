@@ -1,12 +1,12 @@
 # Message Broker & Infrastructure Administration
 
-This document details the configuration, deployment, security policies, and administrative tooling for the **Eclipse Mosquitto 2** MQTT broker service located in [broker/](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/broker/).
+This document details the configuration, deployment, security policies, and administrative tooling for the **Eclipse Mosquitto 2** MQTT broker service located in [broker/](../broker/).
 
 ---
 
 ## 1. Container Architecture & Service Definition
 
-The broker is containerized via Docker Compose in [docker-compose.yaml](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/broker/docker-compose.yaml):
+The broker is containerized via Docker Compose in [docker-compose.yaml](../broker/docker-compose.yaml):
 
 ```yaml
 services:
@@ -35,7 +35,7 @@ services:
 
 ## 2. Broker Configuration File (`mosquitto.conf`)
 
-Source: [mosquitto.conf](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/broker/mosquitto.conf)
+Source: [mosquitto.conf](../broker/mosquitto.conf)
 
 ```ini
 # Eclipse Mosquitto 2 Configuration
@@ -79,7 +79,7 @@ log_timestamp_format %Y-%m-%dT%H:%M:%S
 
 ## 3. User & Password Management Automation
 
-Source script: [manage_mqtt_auth.sh](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/scripts/manage_mqtt_auth.sh)
+Source script: [manage_mqtt_auth.sh](../scripts/manage_mqtt_auth.sh)
 
 Because `passwd` is mounted read-only (`:ro`) into the running Mosquitto container for security, manual in-place editing inside the container is blocked. The project provides an automated bash utility in `scripts/manage_mqtt_auth.sh` that spins up an ephemeral container, applies PBKDF2 hashing, enforces Mosquitto 2 permission requirements (UID `1883`, mode `0700`), and sends a `SIGHUP` reload signal to Mosquitto.
 
@@ -124,7 +124,7 @@ Erases the existing password file and creates a fresh file with a single initial
 
 ### 4.1 Reaching the Broker from Containers
 When the Consumer backend runs inside a Docker container (via `compose.yaml`), connecting to `127.0.0.1` addresses the container itself rather than the host broker.
-- **Docker Compose Gateway:** [compose.yaml](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/compose.yaml) maps the host interface using `extra_hosts`:
+- **Docker Compose Gateway:** [compose.yaml](../visualization/consumer/compose.yaml) maps the host interface using `extra_hosts`:
   ```yaml
   extra_hosts:
     - "host.docker.internal:host-gateway"
@@ -148,7 +148,7 @@ Microcontrollers on the local Wi-Fi network cannot resolve `localhost` or `host.
 
 ## 5. Broker Diagnostics & Health Verification Suite
 
-Source script: [debug_broker.py](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/scripts/debug_broker.py)
+Source script: [debug_broker.py](../scripts/debug_broker.py)
 
 The diagnostic suite validates network reachability, TCP sockets, authentication enforcement, and prints the exact parameters needed for ESP8266 nodes.
 

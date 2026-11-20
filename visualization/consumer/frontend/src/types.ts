@@ -1,12 +1,17 @@
 export type FanSpeed = 'off' | 'low' | 'medium' | 'high'
 
 export interface Telemetry {
+  fw_version?: string
   temp?: number
   hum?: number
   motion?: boolean
   timestamp?: number
   fan_speed?: string
   relay_on?: boolean
+  light_on?: boolean
+  light_pin_cmd?: 0 | 1
+  light_pin_read?: 0 | 1
+  light_active_low?: boolean
   target_temp?: number
   sensor_ok?: boolean
   warmup?: boolean
@@ -26,6 +31,11 @@ export interface ReceiveState {
 }
 
 export interface Weather {
+  city?: string
+  temp_c?: number
+  hum?: number
+  desc?: string
+  ts?: number
   name?: string
   dt?: number
   main?: { temp?: number; humidity?: number }
@@ -38,7 +48,7 @@ export interface CommandAck {
   action?: string
   override?: boolean
   error?: string
-  applied?: { relay_on: boolean; target_temp: number; fan_speed: FanSpeed }
+  applied?: { relay_on: boolean; light_on?: boolean; target_temp: number; fan_speed: FanSpeed }
 }
 
 export interface Metadata {

@@ -29,7 +29,7 @@ visualization/analytics/
 
 ## 2. Physics-Based Synthetic Telemetry Generator
 
-Source: [generate_mock_data.py](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/analytics/generate_mock_data.py)
+Source: [generate_mock_data.py](../visualization/analytics/generate_mock_data.py)
 
 To rigorously train and benchmark machine learning models without waiting months for physical sensor collection, the system synthesizes 100,000 sequential 1-minute telemetry rows that strictly obey the laws of thermodynamics, weather dynamics, human occupancy cycles, and inverter AC compressor characteristics.
 
@@ -112,7 +112,7 @@ Where:
 
 ## 3. Machine Learning Training & Evaluation Pipeline
 
-Source: [train_regression_model.py](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/analytics/train_regression_model.py)
+Source: [train_regression_model.py](../visualization/analytics/train_regression_model.py)
 
 ### 3.1 Preprocessing Pipeline
 Features are separated and transformed inside a scikit-learn `ColumnTransformer`:
@@ -136,7 +136,7 @@ graph TD
 ```
 
 #### Official Model Benchmark Scorecard
-Source: [model_metrics.json](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/analytics/models/model_metrics.json)
+Source: [model_metrics.json](../visualization/analytics/models/model_metrics.json)
 
 | Model Name | $R^2$ Score | RMSE (Watts) | MAE (Watts) | MAPE (%) | Explained Variance | Fit Duration |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -151,7 +151,7 @@ Source: [model_metrics.json](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visua
 
 ## 4. Streamlit Interactive Analytics Dashboard
 
-Source: [app.py](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/analytics/app.py)
+Source: [app.py](../visualization/analytics/app.py)
 
 The dashboard presents 6 full-featured analytical modules:
 

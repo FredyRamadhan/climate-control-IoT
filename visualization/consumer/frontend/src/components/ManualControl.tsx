@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, CircleAlert, Clock3, Fan, LoaderCircle, Minus, Plus, Power, RotateCcw, SlidersHorizontal } from 'lucide-react'
+import { Check, CircleAlert, Clock3, Fan, Lightbulb, LoaderCircle, Minus, Plus, Power, RotateCcw, SlidersHorizontal } from 'lucide-react'
 import { fanLabels, isNumber } from '../lib/format'
 import type { CommandResult, FanSpeed, Telemetry } from '../types'
 
@@ -7,6 +7,7 @@ interface Settings {
   temp: number
   fan: FanSpeed
   power: boolean
+  light: boolean
 }
 
 interface Feedback {
@@ -26,6 +27,7 @@ function fromTelemetry(telemetry: Telemetry | null): Settings {
     temp: isNumber(telemetry?.target_temp) ? Math.min(30, Math.max(16, telemetry.target_temp)) : 24,
     fan: fans.includes(telemetry?.fan_speed as FanSpeed) ? telemetry?.fan_speed as FanSpeed : 'medium',
     power: typeof telemetry?.relay_on === 'boolean' ? telemetry.relay_on : true,
+    light: typeof telemetry?.light_on === 'boolean' ? telemetry.light_on : false,
   }
 }
 
@@ -38,7 +40,9 @@ export function ManualControl({ telemetry, receivedAt, canCommand, overrideActiv
 }) {
   // A draft takes precedence over polling until the device confirms a command.
   const [draft, setDraft] = useState<Draft | null>(null)
-  const [seconds, setSeconds] = useState(60)
+  // Default to "until released" so a manual light-off is not silently reverted
+  // by the occupancy rule when a short timer expires.
+  const [seconds, setSeconds] = useState(0)
   const [busy, setBusy] = useState<'override' | 'release' | null>(null)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
   const sending = useRef(false)
@@ -73,6 +77,7 @@ export function ManualControl({ telemetry, receivedAt, canCommand, overrideActiv
           request_id: `dash-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`}`,
           ...(action === 'override' ? {
             relay_on: settings.power,
+            light_on: settings.light,
             target_temp: settings.temp,
             fan_speed: settings.fan,
             duration_s: seconds,
@@ -123,6 +128,14 @@ export function ManualControl({ telemetry, receivedAt, canCommand, overrideActiv
           <span className="switch-thumb" />
         </button>
       </div>
+      <div className="power-row power-row--light">
+        <div className="control-label"><Lightbulb size={18} /><label htmlFor="light-power">Lampu ruangan</label></div>
+        <button type="button" id="light-power" className="switch" role="switch"
+          aria-checked={settings.light} aria-label="Lampu ruangan"
+          onClick={() => edit({ light: !settings.light })}>
+          <span className="switch-thumb" />
+        </button>
+      </div>
       <div className={`temperature-control${settings.power ? '' : ' temperature-control--off'}`}>
         <label htmlFor="target-temp">Temperatur target</label>
         <div className="stepper">
@@ -147,10 +160,10 @@ export function ManualControl({ telemetry, receivedAt, canCommand, overrideActiv
       <div className="duration-control">
         <label htmlFor="override-duration" className="control-label"><Clock3 size={18} />Durasi override</label>
         <select id="override-duration" value={seconds} onChange={(event) => setSeconds(Number(event.target.value))}>
-          <option value="5">5 detik</option><option value="30">30 detik</option>
+          <option value="0">Sampai dilepas</option>
           <option value="60">1 menit</option><option value="300">5 menit</option>
           <option value="900">15 menit</option><option value="3600">1 jam</option>
-          <option value="0">Sampai dilepas</option>
+          <option value="5">5 detik</option><option value="30">30 detik</option>
         </select>
       </div>
       <button type="button" className="button button--primary apply-button"
@@ -171,7 +184,8 @@ export function ManualControl({ telemetry, receivedAt, canCommand, overrideActiv
       </p> : <p className="control-hint">{!canCommand
         ? 'Kontrol tersedia setelah koneksi perangkat siap.'
         : draftActive && draft.confirmedAt === null ? 'Pengaturan berubah. Terapkan untuk mengirim ke perangkat.'
-          : 'Setelah durasi berakhir, kontrol otomatis kembali aktif.'}</p>}
+          : seconds === 0 ? 'Kontrol manual aktif sampai Anda menekan Kembali ke otomatis.'
+            : 'Setelah durasi berakhir, kontrol otomatis kembali aktif.'}</p>}
     </div>
   </section>
 }

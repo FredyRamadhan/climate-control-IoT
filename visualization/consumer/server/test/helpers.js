@@ -6,7 +6,7 @@ import { SUBSCRIPTIONS, TOPICS } from '../topics.js';
 
 export const telemetry = {
   motion: true, temp: 26.4, hum: 58, timestamp: 1794916800,
-  fan_speed: 'medium', relay_on: true, target_temp: 24,
+  fan_speed: 'medium', relay_on: true, light_on: true, target_temp: 24,
   sensor_ok: true, ir_sent: true, uptime_ms: 7200000, override: false,
 };
 

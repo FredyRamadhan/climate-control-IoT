@@ -313,7 +313,7 @@ A complete transmission consists of four 8-bit bytes (32 bits total):
 
 The 5-bit checksum guarantees that corrupted IR pulses (e.g. from fluorescent lighting or reflections) are discarded.
 
-#### Frame Construction in C++ ([transmit-node.ino](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/board/transmit-node/transmit-node.ino#L178-L186))
+#### Frame Construction in C++ ([transmit-node.ino](../board/transmit-node/transmit-node.ino#L178-L186))
 ```cpp
 uint32_t buildIrFrame() {
   uint8_t flags = (relayOn ? AC_IR_RELAY_BIT : 0x00) | (fanSpeed & AC_IR_FAN_MASK);
@@ -326,7 +326,7 @@ uint32_t buildIrFrame() {
 }
 ```
 
-#### Frame Decoding in C++ ([receive-node.ino](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/board/receive-node/receive-node.ino#L150-L186))
+#### Frame Decoding in C++ ([receive-node.ino](../board/receive-node/receive-node.ino#L150-L186))
 ```cpp
 bool decodeAcFrame(uint32_t rawValue, bool &outPowerOn, uint8_t &outTargetTemp, FanSpeed &outFanSpeed) {
   uint8_t header       = (rawValue >> 24) & 0xFF;

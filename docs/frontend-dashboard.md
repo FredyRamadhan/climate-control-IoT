@@ -1,6 +1,6 @@
 # Frontend Web Application & User Interface
 
-This document specifies the architecture, state management, components, themes, and design patterns of the **AutoClimate Dashboard** web application located in [visualization/consumer/frontend/](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/frontend/).
+This document specifies the architecture, state management, components, themes, and design patterns of the **AutoClimate Dashboard** web application located in [visualization/consumer/frontend/](../visualization/consumer/frontend/).
 
 ---
 
@@ -10,7 +10,7 @@ This document specifies the architecture, state management, components, themes, 
 - **Build Tool:** Vite 6 with `@vitejs/plugin-react`.
 - **Icons:** Lucide React (`lucide-react`).
 - **Typography:** Self-hosted **Source Sans 3** font files (`400`, `500`, `600`, `700` weights) in modern WOFF2 format located in `public/fonts/`. No external Google Fonts CDN requests are made, enabling seamless offline LAN operation.
-- **Styling Architecture:** Pure modular CSS ([App.css](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/frontend/src/App.css), [index.css](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/frontend/src/index.css)) utilizing CSS Custom Properties for dynamic theme variables. No heavy utility frameworks (e.g. Tailwind or Bootstrap) are used, ensuring a lightweight asset footprint.
+- **Styling Architecture:** Pure modular CSS ([App.css](../visualization/consumer/frontend/src/App.css), [index.css](../visualization/consumer/frontend/src/index.css)) utilizing CSS Custom Properties for dynamic theme variables. No heavy utility frameworks (e.g. Tailwind or Bootstrap) are used, ensuring a lightweight asset footprint.
 - **Localization:** 100% native Indonesian language interface designed for Indonesian climate monitoring contexts.
 
 ---
@@ -48,7 +48,7 @@ visualization/consumer/frontend/
 ## 3. State Management & Custom Hooks
 
 ### 3.1 `useDashboard` (Real-Time Telemetry Polling)
-Source: [useDashboard.ts](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/frontend/src/hooks/useDashboard.ts)
+Source: [useDashboard.ts](../visualization/consumer/frontend/src/hooks/useDashboard.ts)
 
 The `useDashboard` hook encapsulates network communication between the frontend and the Express REST API:
 - **Polling Cadence:** Automatically fetches `/api/dashboard` every 3,000 ms (`POLL_INTERVAL_MS = 3000`).
@@ -71,7 +71,7 @@ export function useDashboard(): {
 ---
 
 ### 3.2 `useTheme` (Light/Dark Mode Engine)
-Source: [useTheme.ts](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/frontend/src/hooks/useTheme.ts)
+Source: [useTheme.ts](../visualization/consumer/frontend/src/hooks/useTheme.ts)
 
 Provides instant light/dark theme switching:
 - **Persistence:** Stores user choice in `localStorage.getItem('theme')`.
@@ -104,7 +104,7 @@ graph TD
     OverviewCol --> ClimatePanel["Climate Panel<br/>• Live Room Temp<br/>• AC Photo & Animated Airflow (IR-commanded AC power)<br/>• Metrics (Target, Fan, Power)"]
     OverviewCol --> SensorGrid["Sensor Grid<br/>• Indoor Humidity<br/>• Motion Occupancy<br/>• Outdoor Weather"]
 
-    ControlCol --> ManualControl["Manual Control Component<br/>• AC Power Toggle (38 kHz IR command)<br/>• Temp Stepper (16-30°C IR setpoint)<br/>• Fan Mode Selector (IR mode)<br/>• Duration Presets<br/>• Auto-Release Button"]
+    ControlCol --> ManualControl["Manual Control Component<br/>• AC Power Toggle (38 kHz IR command)<br/>• Room Lighting Relay Toggle (GPIO12)<br/>• Temp Stepper (16-30°C IR setpoint)<br/>• Fan Mode Selector (IR mode)<br/>• Duration Presets (default: until released)<br/>• Auto-Release Button"]
     ControlCol --> SystemStatus["System Status Panel<br/>• Broker Status<br/>• Transmitter Status<br/>• Receiver Status (decoded IR telemetry)"]
 ```
 
@@ -113,7 +113,7 @@ graph TD
 ## 5. Component Deep Dive
 
 ### 5.1 Climate Scene & Airflow Animation
-Source: [App.tsx](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/frontend/src/App.tsx#L121-L135)
+Source: [App.tsx](../visualization/consumer/frontend/src/App.tsx#L121-L135)
 - **Live Room Temperature:** Displays the DHT11 reading with a glowing pulsing green dot when live, or a muted grey dot when offline.
 - **AC Appliance Visual:** Integrates an authentic photograph of the room's AC unit (`/images/ac-photo.png`).
 - **Dynamic Airflow Animation:** When `tx.relay_on === true`, five distinct horizontal wave streams animate downward across the unit using pure CSS `@keyframes airflow`:
@@ -126,7 +126,7 @@ Source: [App.tsx](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/co
   ```
 
 ### 5.2 Manual Control Interface
-Source: [ManualControl.tsx](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/frontend/src/components/ManualControl.tsx)
+Source: [ManualControl.tsx](../visualization/consumer/frontend/src/components/ManualControl.tsx)
 
 Provides operator intervention controls:
 
@@ -141,20 +141,26 @@ Provides operator intervention controls:
   - **Tinggi (`high`)**: Maximum cooling throughput.
 
 #### 3. Override Duration Presets
-- Quick preset buttons: **1 Menit (60s)**, **5 Menit (300s)**, **10 Menit (600s)**, **1 Jam (3600s)**, or **Tanpa batas (0s)** for indefinite manual locking.
+- Selectable presets: **Sampai dilepas (0s)** for indefinite manual locking, **1 Menit (60s)**, **5 Menit (300s)**, **15 Menit (900s)**, **1 Jam (3600s)**, plus short **5s/30s** test presets.
+- The default is **Sampai dilepas** so a manual light-off is not reverted by the occupancy rule when a short timer expires. Press **Kembali ke otomatis** to release the override.
 
-#### 4. Optimistic Draft Management
+#### 4. Room Lighting Relay Toggle
+- `light_on` is sent inside the same structured override as AC power, temperature, and fan speed.
+- The switch reflects `transmit.data.light_on`; a successful ACK keeps the selected state until fresh telemetry arrives.
+- Indefinite overrides keep the lamp off until the operator releases manual control.
+
+#### 5. Optimistic Draft Management
 - While the operator is adjusting controls, changes are preserved in a local `draft` state without jumping back to older telemetry values before the command is confirmed by the transmitter.
 - Once the hardware returns a successful ACK, `confirmedAt` is updated and the draft locks until fresh sensor data confirms the change.
 
-#### 5. Return to Automatic Mode ("Kembali ke otomatis")
+#### 6. Return to Automatic Mode ("Kembali ke otomatis")
 - Dispatches `action: "release"`, immediately restoring the autonomous rule engine.
 
 ---
 
 ## 6. Localization & Formatting Utilities
 
-Source: [format.ts](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/frontend/src/lib/format.ts)
+Source: [format.ts](../visualization/consumer/frontend/src/lib/format.ts)
 
 All presentation values are formatted according to Indonesian cultural standards:
 - **Temperature Display:** `celsius(24.5)` -> `"24,5 °C"`.
@@ -187,7 +193,7 @@ All presentation values are formatted according to Indonesian cultural standards
 cd visualization/consumer
 npm run dev:client
 ```
-The Vite development server launches at `http://localhost:5173`. API calls to `/api` are automatically proxied to the Express backend running on port 8000 via [vite.config.ts](file:///home/frdn/Downloads/Kuliah/IoT/Proyek/visualization/consumer/frontend/vite.config.ts):
+The Vite development server launches at `http://localhost:5173`. API calls to `/api` are automatically proxied to the Express backend running on port 8000 via [vite.config.ts](../visualization/consumer/frontend/vite.config.ts):
 
 ```typescript
 export default defineConfig({

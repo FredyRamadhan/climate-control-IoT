@@ -58,10 +58,19 @@ function App() {
   const receiverOnline = brokerOnline && data?.receive_status?.online !== false && Boolean(rx) && !isStale(data?.metadata.receive, data)
   const canCommand = transmitterOnline && data?.health.subscriptions_ready === true
   const overridden = tx?.override === true
-  const weatherCondition = typeof weather?.weather?.[0]?.main === 'string' ? weather.weather[0].main : ''
+  const rawWeatherTemp = isNumber(weather?.temp_c) ? weather.temp_c : weather?.main?.temp
+  const weatherTemperature = celsius(rawWeatherTemp)
+  const weatherHumidity = isNumber(weather?.hum) ? weather.hum : weather?.main?.humidity
+  const weatherLocation = (typeof weather?.city === 'string' && weather.city)
+    ? weather.city
+    : (typeof weather?.name === 'string' && weather.name)
+      ? weather.name
+      : 'Surakarta'
+  const rawWeatherMain = typeof weather?.weather?.[0]?.main === 'string' ? weather.weather[0].main : ''
+  const rawWeatherDesc = typeof weather?.desc === 'string' ? weather.desc : ''
+  const weatherCondition = rawWeatherMain || rawWeatherDesc || ''
   const rainy = /rain|drizzle|thunder|shower|hujan/i.test(weatherCondition)
   const WeatherIcon = rainy ? CloudRain : CloudSun
-  const weatherTemperature = celsius(weather?.main?.temp)
   const date = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
   const hasRoomTemperature = sensorValid && isNumber(tx?.temp)
   const status = connection === 'loading' ? { label: 'Menghubungkan', tone: 'neutral' as const }
@@ -160,7 +169,7 @@ function App() {
                 <Detail icon={Thermometer} label="Target" value={isNumber(tx?.target_temp) ? `${number(tx.target_temp, 0)}°C` : '—'} />
                 <Detail icon={Fan} label="Kipas" value={typeof tx?.fan_speed === 'string' ? fanLabels[tx.fan_speed] || tx.fan_speed : '—'} />
                 <Detail icon={Power} label="Daya AC" value={typeof tx?.relay_on === 'boolean' ? tx.relay_on ? 'Nyala' : 'Mati' : '—'} />
-                <Detail icon={Lightbulb} label="Lampu" value="Belum tersedia" />
+                <Detail icon={Lightbulb} label="Lampu" value={typeof tx?.light_on === 'boolean' ? tx.light_on ? 'Nyala' : 'Mati' : '—'} />
               </div>
               <div className="climate-footer"><span><RefreshCw size={12} />{data?.metadata.transmit ? `Diperbarui ${time(data.metadata.transmit.received_at)}` : 'Data akan muncul saat perangkat terhubung'}</span>
                 {overridden && <span className="override-remaining">{tx?.override_indefinite ? 'Sampai dilepas' : `${duration(tx?.override_remaining_s)} tersisa`}</span>}
@@ -187,8 +196,8 @@ function App() {
                 <article className="sensor-card sensor-card--weather panel">
                   <div className="sensor-heading"><span className="sensor-icon sensor-icon--weather"><WeatherIcon size={21} /></span><span>Cuaca luar</span></div>
                   <Reading value={weatherTemperature} unit="°C" /><p>{weatherLabel(weatherCondition)}</p>
-                  <div className="weather-location"><MapPin size={13} /><span>{typeof weather?.name === 'string' ? weather.name : 'Surakarta'}</span></div>
-                  <div className="sensor-footnote">{isNumber(weather?.main?.humidity) ? <><Droplets size={13} />{number(weather.main.humidity, 0)}% kelembapan</> : 'Menunggu data cuaca'}</div>
+                  <div className="weather-location"><MapPin size={13} /><span>{weatherLocation}</span></div>
+                  <div className="sensor-footnote">{isNumber(weatherHumidity) ? <><Droplets size={13} />{number(weatherHumidity, 0)}% kelembapan</> : 'Menunggu data cuaca'}</div>
                 </article>
               </div>
             </section>

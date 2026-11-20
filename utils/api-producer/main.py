@@ -37,7 +37,7 @@ MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 MQTT_USER = os.getenv("MQTT_USER", "iot_user")
 MQTT_PASS = os.getenv("MQTT_PASS", "iot_password")
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "")
-CITY = os.getenv("CITY", "Jakarta")
+CITY = os.getenv("CITY", "Surakarta")
 POLL_SECONDS = int(os.getenv("POLL_SECONDS", "600"))
 
 TOPIC_WEATHER = "api/weather"
@@ -71,12 +71,29 @@ def fetch_weather(city: str, api_key: str) -> dict:
             response = requests.get(OPENWEATHER_BASE_URL, params=params, timeout=10)
             if response.status_code == 200:
                 data = response.json()
+                temp_c = round(float(data["main"]["temp"]), 1)
+                humidity = int(data["main"]["humidity"])
+                desc = str(data["weather"][0]["description"])
+                weather_main = str(data["weather"][0].get("main", "Clouds"))
+                city_name = str(data.get("name", city))
+                ts = int(data.get("dt", time.time()))
                 return {
-                    "city": str(data.get("name", city)),
-                    "temp_c": round(float(data["main"]["temp"]), 1),
-                    "hum": int(data["main"]["humidity"]),
-                    "desc": str(data["weather"][0]["description"]),
-                    "ts": int(data.get("dt", time.time())),
+                    "city": city_name,
+                    "temp_c": temp_c,
+                    "hum": humidity,
+                    "desc": desc,
+                    "ts": ts,
+                    "name": city_name,
+                    "main": {
+                        "temp": temp_c,
+                        "humidity": humidity,
+                    },
+                    "weather": [
+                        {
+                            "main": weather_main,
+                            "description": desc,
+                        }
+                    ],
                 }
             else:
                 logger.warning(
@@ -93,6 +110,17 @@ def fetch_weather(city: str, api_key: str) -> dict:
         "hum": 75,
         "desc": "scattered clouds (simulated)",
         "ts": int(time.time()),
+        "name": str(city),
+        "main": {
+            "temp": 28.5,
+            "humidity": 75,
+        },
+        "weather": [
+            {
+                "main": "Clouds",
+                "description": "scattered clouds (simulated)",
+            }
+        ],
     }
 
 
